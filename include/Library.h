@@ -37,18 +37,18 @@ class Combinations {
       return;
     }
     if (combination_size_ == 0) {
-        // Handle edge case: Choosing 0 elements results in one empty combination.
-        combinations_.push_back({});
-        return;
+      // Handle edge case: Choosing 0 elements results in one empty combination.
+      combinations_.push_back({});
+      return;
     }
 
     // Pre-calculate the number of combinations to reserve memory.
     size_t num_combinations = CalculateCombinationsCount(input_size_,
                                                          combination_size_);
     if (num_combinations > 0) {
-        combinations_.reserve(num_combinations);
-        current_combination_.resize(combination_size_);
-        GenerateCombinationsRecursive(0, 0);
+      combinations_.reserve(num_combinations);
+      current_combination_.resize(combination_size_);
+      GenerateCombinationsRecursive(0, 0);
     }
   }
 
@@ -87,8 +87,8 @@ class Combinations {
     // Which simplifies to: i <= input_size_ - combination_size_ + k
 
     for (size_t i = offset; i <= input_size_ - combination_size_ + k; ++i) {
-        current_combination_[k] = input_set_[i];
-        GenerateCombinationsRecursive(i + 1, k + 1);
+      current_combination_[k] = input_set_[i];
+      GenerateCombinationsRecursive(i + 1, k + 1);
     }
   }
 
@@ -121,7 +121,7 @@ class Combinations {
              throw std::overflow_error(
                 "Overflow detected in CalculateCombinationsCount");
         }
-        result = result * (n - i + 1) / i; // Perform division at each step
+        result *= (n - i + 1) / i; // Perform division at each step
     }
     return result;
   }

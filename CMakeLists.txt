@@ -3,9 +3,9 @@ cmake_minimum_required(VERSION 3.10) # Or your project's minimum
 project(PokerSolver LANGUAGES CXX)
 
 # --- Set C++ Standard ---
-set(CMAKE_CXX_STANDARD 17) # Use C++17 (required for std::optional, std::filesystem)
+set(CMAKE_CXX_STANDARD 20) # Use C++17 (required for std::optional, std::filesystem)
 set(CMAKE_CXX_STANDARD_REQUIRED True) # Error if C++17 is not supported
-set(CMAKE_CXX_EXTENSIONS OFF) # Prefer standard features over extensions
+set(CMAKE_CXX_EXTENSIONS ON) # Prefer standard features over extensions
 # ------------------------
 
 # --- Add AddressSanitizer Flags for Debug Builds ---

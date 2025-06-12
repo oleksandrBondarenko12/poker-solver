@@ -65,13 +65,13 @@ Card Deck::FindCard(int card_int) const {
          // In a standard ordered deck, the card at index `card_int` should
          // be the card with that integer value.
          if (!cards_[card_int].IsEmpty() && cards_[card_int].card_int() == card_int) {
-             return cards_[card_int];
+            return cards_[card_int];
          }
          // Fallback: If deck isn't ordered or standard, search linearly.
          // This shouldn't happen with the default constructor.
          for (const auto& card : cards_) {
              if (!card.IsEmpty() && card.card_int() == card_int) {
-                 return card;
+                return card;
              }
          }
     }

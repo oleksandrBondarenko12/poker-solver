@@ -4,6 +4,7 @@
 #include <sstream>   // For error message formatting
 #include <algorithm> // For std::find
 #include <cctype>    // For std::tolower, std::toupper
+#include <bit> // For std::countr_zero in C++20
 
 namespace poker_solver {
 namespace core {
@@ -169,10 +170,21 @@ uint64_t Card::CardToUint64(const Card& card) {
 std::vector<int> Card::Uint64ToCardInts(uint64_t board_mask) {
     std::vector<int> card_ints;
     card_ints.reserve(7);
-    for (int i = 0; i < kNumCardsInDeck; ++i) {
-        if ((board_mask >> i) & 1) {
-            card_ints.push_back(i);
-        }
+
+    // Loop as long as there are still bits set in the mask
+    while (board_mask != 0) {
+        // Find the index of the lowest set bit.
+        // In C++20, this is the best way:
+        int index = std::countr_zero(board_mask);
+
+        // A common pre-C++20 way using GCC/Clang intrinsics:
+        // int index = __builtin_ctzll(board_mask);
+
+        card_ints.push_back(index);
+
+        // Clear the lowest set bit so we can find the next one in the next iteration.
+        // The trick is: (x & (x - 1)) clears the least significant bit.
+        board_mask &= (board_mask - 1);
     }
     return card_ints;
 }
