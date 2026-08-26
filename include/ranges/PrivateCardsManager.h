@@ -67,6 +67,8 @@ class PrivateCardsManager {
   //   std::out_of_range if player_index is invalid.
   const std::vector<double>& GetInitialReachProbs(size_t player_index) const;
 
+  void SetRelativeProbs(uint64_t initial_board_mask);
+
 
  private:
   // Calculates the relative reach probabilities for all players.
@@ -97,4 +99,3 @@ class PrivateCardsManager {
 } // namespace poker_solver
 
 #endif // POKER_SOLVER_RANGES_PRIVATE_CARDS_MANAGER_H_
-

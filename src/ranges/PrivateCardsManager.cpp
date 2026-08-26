@@ -206,5 +206,41 @@ const std::vector<double>& PrivateCardsManager::GetInitialReachProbs(
 }
 
 
+
+void PrivateCardsManager::SetRelativeProbs(uint64_t initial_board_mask) {
+    size_t players = player_ranges_.size();
+    for (size_t p = 0; p < players; ++p) {
+        size_t oppo = 1 - p;
+        double player_prob_sum = 0.0;
+
+        for (size_t i = 0; i < player_ranges_[p].size(); ++i) {
+            double oppo_prob_sum = 0.0;
+            auto& player_card = player_ranges_[p][i];
+            uint64_t player_long = player_card.GetBoardMask();
+
+            if (core::Card::DoBoardsOverlap(player_long, initial_board_mask)) {
+                continue;
+            }
+
+            for (const auto& oppo_card : player_ranges_[oppo]) {
+                uint64_t oppo_long = oppo_card.GetBoardMask();
+                if (core::Card::DoBoardsOverlap(oppo_long, initial_board_mask) || 
+                    core::Card::DoBoardsOverlap(oppo_long, player_long)) {
+                    continue;
+                }
+                oppo_prob_sum += oppo_card.Weight();
+            }
+            player_card.SetRelativeProb(oppo_prob_sum * player_card.Weight());
+            player_prob_sum += player_card.GetRelativeProb();
+        }
+        for (size_t i = 0; i < player_ranges_[p].size(); ++i) {
+            if (player_prob_sum > 1e-12) {
+                player_ranges_[p][i].SetRelativeProb(player_ranges_[p][i].GetRelativeProb() / player_prob_sum);
+            }
+        }
+    }
+}
+
 } // namespace ranges
 } // namespace poker_solver
+

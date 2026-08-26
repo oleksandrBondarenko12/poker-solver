@@ -21,7 +21,9 @@ struct GameTreeBuildingSettings {
       StreetSetting river_ip_setting,
       StreetSetting flop_oop_setting,
       StreetSetting turn_oop_setting,
-      StreetSetting river_oop_setting);
+      StreetSetting river_oop_setting,
+      StreetSetting preflop_ip_setting = StreetSetting(),
+      StreetSetting preflop_oop_setting = StreetSetting());
 
   // Default constructor (creates empty settings).
   GameTreeBuildingSettings() = default;
@@ -47,6 +49,8 @@ struct GameTreeBuildingSettings {
   StreetSetting flop_oop_setting;
   StreetSetting turn_oop_setting;
   StreetSetting river_oop_setting;
+  StreetSetting preflop_ip_setting;
+  StreetSetting preflop_oop_setting;
 };
 
 } // namespace config

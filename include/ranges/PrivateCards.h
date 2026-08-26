@@ -38,6 +38,10 @@ class PrivateCards {
 
   // Returns the weight associated with this hand.
   double Weight() const { return weight_; }
+  void SetWeight(double w) { weight_ = w; }
+
+  double GetRelativeProb() const { return relative_prob_; }
+  void SetRelativeProb(double p) { relative_prob_ = p; }
 
   // Returns the pre-calculated 64-bit bitmask for these two cards.
   uint64_t GetBoardMask() const { return board_mask_; }
@@ -70,7 +74,8 @@ class PrivateCards {
   int card1_int_;      // Lower card integer (0-51)
   int card2_int_;      // Higher card integer (0-51)
   double weight_;      // Weight/frequency of this hand combo
-  uint64_t board_mask_; // Bitmask representation (1ULL << c1) | (1ULL << c2)
+  uint64_t board_mask_;
+  double relative_prob_ = 0.0;
 };
 
 // --- Hash Function Specialization ---

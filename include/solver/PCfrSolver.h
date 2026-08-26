@@ -15,112 +15,113 @@
 #include <memory>
 #include <string>
 #include <atomic> // For stopping flag
+#include <functional> // For std::function
 #include <json.hpp> // Include actual json header
 
-// Use alias defined in json.hpp
 using json = nlohmann::json;
-
-// Forward declarations to reduce header coupling
-namespace poker_solver { namespace nodes { class ActionNode; } }
-namespace poker_solver { namespace nodes { class ChanceNode; } }
-namespace poker_solver { namespace nodes { class ShowdownNode; } }
-namespace poker_solver { namespace nodes { class TerminalNode; } }
-namespace poker_solver { namespace tree { class GameTree; } } // Ensure GameTree forward decl namespace matches definition
 
 namespace poker_solver {
 namespace solver {
 
-// Concrete implementation of Solver using Discounted CFR.
 class PCfrSolver : public Solver {
 public:
-    // Configuration for the solver
     struct Config {
-        int iteration_limit; // Remove default initializer
-        int num_threads;     // Remove default initializer
+        int iteration_limit; 
+        int num_threads;     
+        std::function<void(int)> progress_callback; // Added for UI progress reporting
 
-        // bool use_isomorphism = false; // Future option
-        // Add trainer type enum if needed (e.g., CFR+, DCFR)
-        // Add precision enum if needed
-        Config() :
-            iteration_limit(1000),
-            num_threads(1)
-        {}
+        Config() : iteration_limit(1000), num_threads(8), progress_callback(nullptr) {}
     };
 
-    // Constructor
-    // Takes dependencies needed for solving. Rule provides initial state.
     PCfrSolver(std::shared_ptr<tree::GameTree> game_tree,
                std::shared_ptr<ranges::PrivateCardsManager> pcm,
                std::shared_ptr<ranges::RiverRangeManager> rrm,
                const config::Rule& rule,
-               Config solver_config = Config()); // Use default config if none provided
+               Config solver_config = Config());
 
-    // --- Solver Interface Implementation ---
     void Train() override;
     void Stop() override;
+
+    // Computes the Expected Value of the current average strategy and sets it in the trainables.
+    // Returns the EV of the root node for both players.
+    std::vector<double> ComputeEV();
+
     json DumpStrategy(bool dump_evs, int max_depth = -1) const override;
 
+    std::shared_ptr<ranges::PrivateCardsManager> GetPrivateCardsManager() const { return pcm_; }
+    std::shared_ptr<ranges::RiverRangeManager> GetRiverRangeManager() const { return rrm_; }
+    uint64_t GetInitialBoardMask() const { return initial_board_mask_; }
+    size_t GetNumPlayers() const { return num_players_; }
+
 private:
-    // The core recursive CFR function
-    // Returns utility vector from the perspective of the 'traverser'.
-    std::vector<double> cfr_utility(
-        std::shared_ptr<core::GameTreeNode> node,
-        const std::vector<std::vector<double>>& reach_probs, // pi_i(h), pi_{-i}(h)
-        int traverser,          // Player whose perspective we calculate utility for
-        int iteration,
-        uint64_t current_board_mask, // Pass board down
-        double chance_reach);       // Probability of reaching this chance outcome
-
-    // Helper function for Action Nodes within cfr_utility
-    std::vector<double> cfr_action_node(
-        std::shared_ptr<nodes::ActionNode> node,
-        const std::vector<std::vector<double>>& reach_probs,
+    void cfr_utility(
+        core::NodeRef node,
+        const double* reach_probs_0,
+        const double* reach_probs_1,
         int traverser,
         int iteration,
         uint64_t current_board_mask,
-        double chance_reach);
+        bool is_top_chance,
+        bool use_average_strategy,
+        double* out_utility);
 
-    // Helper function for Chance Nodes within cfr_utility
-    std::vector<double> cfr_chance_node(
-        std::shared_ptr<nodes::ChanceNode> node,
-        const std::vector<std::vector<double>>& reach_probs,
+
+    void cfr_action_node(
+        uint32_t node_idx,
+        const double* reach_probs_0,
+        const double* reach_probs_1,
         int traverser,
         int iteration,
         uint64_t current_board_mask,
-        double parent_chance_reach); // Renamed for clarity
+        bool is_top_chance,
+        bool use_average_strategy,
+        double* out_utility);
 
-    // Helper function for Showdown Nodes within cfr_utility
-    std::vector<double> cfr_showdown_node(
-        std::shared_ptr<nodes::ShowdownNode> node,
-        const std::vector<std::vector<double>>& reach_probs,
+    void cfr_chance_node(
+        uint32_t node_idx,
+        const double* reach_probs_0,
+        const double* reach_probs_1,
         int traverser,
-        uint64_t final_board_mask,
-        double chance_reach); // Pass chance reach for correct weighting
+        int iteration,
+        uint64_t current_board_mask,
+        bool is_top_chance,
+        bool use_average_strategy,
+        double* out_utility);
 
-    // Helper function for Terminal Nodes within cfr_utility
-    std::vector<double> cfr_terminal_node(
-        std::shared_ptr<nodes::TerminalNode> node,
-        const std::vector<std::vector<double>>& reach_probs,
+    void cfr_showdown_node(
+        uint32_t node_idx,
+        const double* reach_probs_0,
+        const double* reach_probs_1,
         int traverser,
-        double chance_reach); // Pass chance reach for correct weighting
+        uint64_t current_board_mask,
+        double* out_utility);
 
-    // Helper to recursively dump strategy from the tree
+    void cfr_terminal_node(
+        uint32_t node_idx,
+        const double* reach_probs_0,
+        const double* reach_probs_1,
+        int traverser,
+        uint64_t current_board_mask,
+        double* out_utility);
+
     json dump_strategy_recursive(
-        const std::shared_ptr<core::GameTreeNode>& node,
+        core::NodeRef node,
         bool dump_evs,
         int current_depth,
         int max_depth) const;
 
+    void PreallocateTrainables(core::NodeRef node);
 
-    // --- Member Variables ---
+    void ExchangeColor(double* utility, size_t num_hands, int player, int rank1, int rank2) const;
+
     std::shared_ptr<ranges::PrivateCardsManager> pcm_;
     std::shared_ptr<ranges::RiverRangeManager> rrm_;
     uint64_t initial_board_mask_;
-    core::Deck deck_; // Need deck access for chance nodes
+    core::Deck deck_; 
     Config config_;
     std::atomic<bool> stop_signal_{false};
-    bool evs_calculated_ = false; // Track if final EVs are computed
-    const size_t num_players_ = 2; // Hardcoded for now
+    bool evs_calculated_ = false; 
+    const size_t num_players_ = 2; 
 };
 
 } // namespace solver

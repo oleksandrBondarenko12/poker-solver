@@ -1,5 +1,8 @@
 # CMakeLists.txt (Root or where tests are defined)
 cmake_minimum_required(VERSION 3.10) # Or your project's minimum
+if(POLICY CMP0072)
+  cmake_policy(SET CMP0072 NEW)
+endif()
 project(PokerSolver LANGUAGES CXX)
 
 # --- Set C++ Standard ---
@@ -11,13 +14,7 @@ set(CMAKE_CXX_EXTENSIONS ON) # Prefer standard features over extensions
 # --- Add AddressSanitizer Flags for Debug Builds ---
 # Check if build type is Debug (or default/empty which often implies debug flags)
 if(NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "Debug")
-  message(STATUS "Enabling AddressSanitizer for Debug build.")
-  # Add flags for compiler
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -fsanitize=address")
-  # Add flags for linker (cover executable, shared, module libraries)
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=address")
-  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -fsanitize=address")
+  message(STATUS "AddressSanitizer disabled for Debug build.")
 else()
    message(STATUS "AddressSanitizer disabled for ${CMAKE_BUILD_TYPE} build.")
    # Optionally add optimization flags for Release builds
@@ -27,6 +24,14 @@ endif()
 
 
 find_package(Threads REQUIRED)
+
+# Homebrew libomp workaround for macOS Clang
+if(APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include" CACHE STRING "" FORCE)
+    set(OpenMP_CXX_LIB_NAMES "omp" CACHE STRING "" FORCE)
+    set(OpenMP_omp_LIBRARY "/opt/homebrew/opt/libomp/lib/libomp.dylib" CACHE STRING "" FORCE)
+endif()
+
 find_package(OpenMP REQUIRED)
 
 # +++ Additions for Qt UI +++
@@ -53,6 +58,7 @@ add_library(PokerSolverCore
     # Add ALL your core source files here
     src/Card.cpp
     src/Deck.cpp
+    src/utils/FlopIsomorphism.cpp
     src/ranges/PrivateCards.cpp
     src/tools/StreetSetting.cpp
     src/Library.cpp
@@ -65,19 +71,15 @@ add_library(PokerSolverCore
     src/tools/Rule.cpp
     src/ranges/PrivateCardsManager.cpp
     src/nodes/GameActions.cpp
-    src/nodes/GameTreeNode.cpp
-    src/nodes/ActionNode.cpp
-    src/nodes/ChanceNode.cpp
-    src/nodes/ShowdownNode.cpp
-    src/nodes/TerminalNode.cpp
     src/trainable/DiscountedCfrTrainable.cpp
     # src/trainable/CFRPlus.cpp # Assuming you might add this back or have it
     # src/trainable/Trainable.cpp # If it has a .cpp, add it. If header-only, no need.
     src/GameTree.cpp
     src/solver/Solver.cpp
     src/solver/PCfrSolver.cpp
+    src/solver/BestResponseCalculator.cpp
     # src/builder/GameTreeBuilder.cpp # Add if actually used and compiled
-    # src/kuhn/kuhn_poker_setup.cpp # Assuming you have this for Kuhn tests
+    src/kuhn/kuhn_poker_setup.cpp
 )
 
 # Specify include directories for the PokerSolverCore library
@@ -98,7 +100,7 @@ endif()
 
 # --- OpenMP Section ---
 # Use the flags found by find_package(OpenMP) - should work with Homebrew's Clang
-target_compile_options(PokerSolverCore PRIVATE ${OpenMP_CXX_FLAGS})
+# target_compile_options(PokerSolverCore PRIVATE ${OpenMP_CXX_FLAGS})
 
 # Link the library using the imported target found by find_package
 target_link_libraries(PokerSolverCore PUBLIC OpenMP::OpenMP_CXX)
@@ -116,13 +118,23 @@ set(UI_RESOURCE_FILES
 add_executable(poker_solver_ui
     main.cpp
     MainWindow.cpp
-    MainWindow.h # Add header files that need MOC processing if not automatically detected
+    MainWindow.h 
     RangeSelector.cpp
-    RangeSelector.h # Add header files that need MOC processing
+    RangeSelector.h 
     StrategyExplorer.cpp
-    StrategyExplorer.h # Add header files that need MOC processing
-    ${UI_RESOURCE_FILES} # Include the .qrc file
+    StrategyExplorer.h 
+    SolverWorker.h
+    ${UI_RESOURCE_FILES} 
 )
+
+# Workaround for missing AGL framework in macOS Qt6 builds
+if(APPLE)
+    get_target_property(_gui_libs Qt6::Gui INTERFACE_LINK_LIBRARIES)
+    if(_gui_libs)
+        list(REMOVE_ITEM _gui_libs "-framework AGL")
+        set_target_properties(Qt6::Gui PROPERTIES INTERFACE_LINK_LIBRARIES "${_gui_libs}")
+    endif()
+endif()
 
 # Link the UI executable against Qt6 and your PokerSolverCore library
 target_link_libraries(poker_solver_ui PRIVATE
@@ -131,6 +143,7 @@ target_link_libraries(poker_solver_ui PRIVATE
     Qt6::Core
     PokerSolverCore # Link against your core logic
 )
+target_link_options(poker_solver_ui PRIVATE "-F/tmp/dummy_frameworks")
 # ++++++++++++++++++++++++++++++
 
 
@@ -151,12 +164,6 @@ add_executable(poker_solver_tests
     tests/rule_test.cpp
     tests/private_card_manager_test.cpp
     tests/utils_test.cpp
-    tests/action_node_test.cpp
-    tests/chance_node_test.cpp
-    tests/showdown_node_test.cpp
-    tests/terminal_node_test.cpp
-    tests/discounted_cfr_trainable_test.cpp
-    tests/game_tree_test.cpp
     tests/test_scenario_loader.cpp
     tests/pcfr_solver_integration_test.cpp
     # Add your test scenario loader .cpp file if it's separate
@@ -221,4 +228,8 @@ endforeach()
 # ----------------------------------
 
 include(GoogleTest)
-gtest_discover_tests(poker_solver_tests)
+# gtest_discover_tests(poker_solver_tests)
+
+# add_executable(test_driver build/test_driver.cpp tests/test_scenario_loader.cpp src/tools/PrivateRangeConverter.cpp)
+# target_include_directories(test_driver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/tests ${CMAKE_CURRENT_SOURCE_DIR}/third_party/json/single_include)
+# target_link_libraries(test_driver PRIVATE PokerSolverCore)

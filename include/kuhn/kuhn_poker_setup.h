@@ -1,24 +1,16 @@
-i#ifndef POKER_SOLVER_KUHN_KUHN_POKER_SETUP_H_
+#ifndef POKER_SOLVER_KUHN_KUHN_POKER_SETUP_H_
 #define POKER_SOLVER_KUHN_KUHN_POKER_SETUP_H_
 
-#include "compairer/Compairer.h" // Base class for comparer
-#include "nodes/GameTreeNode.h"  // Base class for tree nodes
-#include "GameTree.h"            // For GameTree class (optional, could return root node directly)
-
+#include <cstdint>
 #include <vector>
-#include <memory> // For std::shared_ptr
+#include <memory>
 #include <stdexcept>
 
+#include "compairer/Compairer.h"
+#include "GameTree.h"
+#include "ranges/PrivateCards.h"
+
 namespace poker_solver {
-
-// Forward declare node types used in the builder
-namespace nodes {
-    class ActionNode;
-    class ChanceNode;
-    class ShowdownNode;
-    class TerminalNode;
-} // namespace nodes
-
 namespace kuhn {
 
 // --- Constants for Kuhn Poker ---
@@ -40,15 +32,11 @@ public:
     core::ComparisonResult CompareHands(int private_card1, int private_card2) const;
 
     // --- Implementations matching the Compairer interface ---
-    // We only really need the single-card comparison for Kuhn.
-    // Others can throw or return default/invalid values.
-
     core::ComparisonResult CompareHands(
         const std::vector<int>& private_hand1,
         const std::vector<int>& private_hand2,
         const std::vector<int>& public_board) const override;
 
-    // Mask versions are not applicable to Kuhn in this simple setup
     core::ComparisonResult CompareHands(uint64_t private_mask1,
                                         uint64_t private_mask2,
                                         uint64_t public_mask) const override;
@@ -56,22 +44,17 @@ public:
     int GetHandRank(const std::vector<int>& private_hand,
                     const std::vector<int>& public_board) const override;
 
-    // Mask version not applicable
     int GetHandRank(uint64_t private_mask,
                     uint64_t public_mask) const override;
-
 };
 
 // --- Kuhn Game Tree Builder ---
-// Function to explicitly build the Kuhn Poker game tree.
-// Returns the root node of the constructed tree.
-std::shared_ptr<core::GameTreeNode> build_kuhn_game_tree();
-
+// Builds the Kuhn Poker game tree directly using the GameTree SoA structure.
+std::shared_ptr<tree::GameTree> build_kuhn_game_tree();
 
 // --- Helper: Kuhn Range ---
 // Creates the initial uniform range {J, Q, K} for Kuhn Poker.
-// Note: Uses the base PrivateCards struct, but only card1_int matters.
-std::vector<core::PrivateCards> get_kuhn_initial_range();
+std::vector<core::PrivateCards> get_kuhn_initial_range(int dummy_card);
 
 } // namespace kuhn
 } // namespace poker_solver

@@ -2,11 +2,11 @@
     "test_case_name": "SimpleFlop_OOPBets_IPCalls",
     "description": "A basic scenario on the flop where OOP makes a pot-sized bet and IP calls.",
     "solver_config": {
-      "iterations": 81,
+      "iterations": 1000,
       "threads": 8
     },
     "game_rule": {
-      "starting_round": "Flop",
+      "starting_round": "River",
       "initial_commitments": {
         "ip": 15.0,
         "oop": 15.0
@@ -18,7 +18,7 @@
       "effective_stack": 100.0,
       "raise_limit_per_street": 1,
       "all_in_threshold_ratio": 0.67,
-      "initial_board": ["Ts", "Jh", "2h"],
+      "initial_board": ["Ts", "Jh", "2h", "4c", "5d"],
       "building_settings": {
         "flop_ip": {
           "bet_sizes_percent": [33],
