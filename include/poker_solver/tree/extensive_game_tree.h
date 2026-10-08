@@ -4,19 +4,18 @@
 #include "poker_solver/core/card_deck.h"
 #include "poker_solver/tree/poker_action_edge.h"
 #include "poker_solver/tree/game_tree_node_types.h"
-#include "poker_solver/tree/tree_building_config.h"
 #include "poker_solver/tree/scenario_game_rule.h"
 #include <cstdint>
-#include "poker_solver/json.hpp"
 #include <memory>
 #include <vector>
 #include <unordered_map>
 #include <span>
 #include <mutex>
 
-#include "poker_solver/solver/information_set_strategy.h"
-
 namespace poker_solver {
+namespace solver {
+class Trainable;
+}
 namespace ranges {
 class PrivateCardsManager;
 }
