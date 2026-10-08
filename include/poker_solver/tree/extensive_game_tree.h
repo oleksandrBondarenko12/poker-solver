@@ -14,10 +14,9 @@
 #include <span>
 #include <mutex>
 
+#include "poker_solver/solver/information_set_strategy.h"
+
 namespace poker_solver {
-namespace solver {
-class Trainable;
-}
 namespace ranges {
 class PrivateCardsManager;
 }
