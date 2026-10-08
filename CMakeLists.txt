@@ -43,6 +43,11 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets Gui Core)
 # CMAKE_AUTOMOC: Enables automatic meta-object code generation.
 # CMAKE_AUTOUIC: Enables automatic user interface code generation from .ui files (if any).
 # CMAKE_AUTORCC: Enables automatic resource code generation from .qrc files.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fsanitize=address")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -fsanitize=address")
+
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
@@ -55,37 +60,34 @@ set(CMAKE_AUTORCC ON)
 
 # --- Define Poker Solver Core Library ---
 add_library(PokerSolverCore
-    # Add ALL your core source files here
-    src/Card.cpp
-    src/Deck.cpp
-    src/utils/FlopIsomorphism.cpp
-    src/ranges/PrivateCards.cpp
-    src/tools/StreetSetting.cpp
-    src/Library.cpp
-    src/tools/lookup8.cpp
-    src/compairer/Dic5Compairer.cpp
-    src/ranges/RiverCombs.cpp
-    src/tools/PrivateRangeConverter.cpp
-    src/ranges/RiverRangeManager.cpp
-    src/tools/GameTreeBuildingSettings.cpp
-    src/tools/Rule.cpp
-    src/ranges/PrivateCardsManager.cpp
-    src/nodes/GameActions.cpp
-    src/trainable/DiscountedCfrTrainable.cpp
-    # src/trainable/CFRPlus.cpp # Assuming you might add this back or have it
-    # src/trainable/Trainable.cpp # If it has a .cpp, add it. If header-only, no need.
-    src/GameTree.cpp
-    src/solver/Solver.cpp
-    src/solver/PCfrSolver.cpp
-    src/solver/BestResponseCalculator.cpp
-    # src/builder/GameTreeBuilder.cpp # Add if actually used and compiled
-    src/kuhn/kuhn_poker_setup.cpp
+    src/core/poker_card.cpp
+    src/core/card_deck.cpp
+    src/core/solver_math_utils.cpp
+    src/core/jenkins_lookup8.cpp
+    src/core/canonical_flop_isomorphism.cpp
+    src/tree/extensive_game_tree.cpp
+    src/tree/poker_action_edge.cpp
+    src/tree/scenario_game_rule.cpp
+    src/tree/street_betting_rule.cpp
+    src/tree/tree_building_config.cpp
+    src/compairer/table_hand_evaluator.cpp
+    src/ranges/hole_card_combination.cpp
+    src/ranges/range_distribution_manager.cpp
+    src/ranges/evaluated_river_combo.cpp
+    src/ranges/river_evaluation_cache.cpp
+    src/ranges/range_syntax_parser.cpp
+    src/solver/equilibrium_solver_base.cpp
+    src/solver/public_chance_cfr_solver.cpp
+    src/solver/exploitability_calculator.cpp
+    src/solver/discounted_cfr_engine.cpp
+    src/kuhn/kuhn_game_setup.cpp
 )
 
 # Specify include directories for the PokerSolverCore library
 # PUBLIC means these includes are also available to targets linking PokerSolverCore
 target_include_directories(PokerSolverCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/poker_solver
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nlohmann # Add path to nlohmann/json if it's here
 )
 # For std::filesystem
@@ -107,28 +109,38 @@ target_link_libraries(PokerSolverCore PUBLIC OpenMP::OpenMP_CXX)
 # --- End OpenMP Section ---
 
 # +++ Define the UI Executable +++
-# List your Qt resource file(s) here.
-# The README mentions "resources.qrc" in the root.
-# If dark.qss is not included via resources.qrc but compiled directly (unlikely for Qt),
-# you might need to add it here, but typically it's part of the .qrc.
 set(UI_RESOURCE_FILES
-    resources.qrc  # Assuming this is in the root directory of your project
+    src/gui/resources.qrc
 )
 
 add_executable(poker_solver_ui
-    main.cpp
-    MainWindow.cpp
-    MainWindow.h 
-    RangeSelector.cpp
-    RangeSelector.h 
-    StrategyExplorer.cpp
-    StrategyExplorer.h 
-    SolverWorker.h
+    src/gui/main.cpp
+    src/gui/solver_main_window.cpp
+    src/gui/solver_main_window.h 
+    src/gui/range_matrix_dialog.cpp
+    src/gui/range_matrix_dialog.h 
+    src/gui/board_card_dialog.cpp
+    src/gui/board_card_dialog.h
+    src/gui/gto_strategy_explorer.cpp
+    src/gui/gto_strategy_explorer.h 
+    src/gui/solver_background_worker.h
     ${UI_RESOURCE_FILES} 
+)
+
+target_include_directories(poker_solver_ui PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui
 )
 
 # Workaround for missing AGL framework in macOS Qt6 builds
 if(APPLE)
+    if(NOT EXISTS "/tmp/dummy_frameworks/AGL.framework/AGL")
+        file(MAKE_DIRECTORY "/tmp/dummy_frameworks/AGL.framework")
+        execute_process(COMMAND clang -dynamiclib -install_name @rpath/AGL.framework/AGL -o /tmp/dummy_frameworks/AGL.framework/AGL -x c /dev/null)
+    endif()
+    if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/AGL.framework/AGL")
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/AGL.framework")
+        execute_process(COMMAND clang -dynamiclib -install_name @rpath/AGL.framework/AGL -o "${CMAKE_CURRENT_BINARY_DIR}/AGL.framework/AGL" -x c /dev/null)
+    endif()
     get_target_property(_gui_libs Qt6::Gui INTERFACE_LINK_LIBRARIES)
     if(_gui_libs)
         list(REMOVE_ITEM _gui_libs "-framework AGL")
@@ -154,20 +166,18 @@ enable_testing()
 
 # --- Define Your Test Executable ---
 add_executable(poker_solver_tests
-    tests/card_test.cpp
-    tests/deck_test.cpp
-    tests/private_cards_test.cpp
-    tests/dic5_compairer_test.cpp
-    tests/river_range_manager_test.cpp
-    tests/private_range_converter_test.cpp
-    tests/game_tree_building_settings_test.cpp
-    tests/rule_test.cpp
-    tests/private_card_manager_test.cpp
-    tests/utils_test.cpp
-    tests/test_scenario_loader.cpp
-    tests/pcfr_solver_integration_test.cpp
-    # Add your test scenario loader .cpp file if it's separate
-    # tests/test_scenario_loader.cpp
+    tests/poker_card_test.cpp
+    tests/card_deck_test.cpp
+    tests/hole_card_combination_test.cpp
+    tests/table_hand_evaluator_test.cpp
+    tests/river_evaluation_cache_test.cpp
+    tests/range_syntax_parser_test.cpp
+    tests/tree_building_config_test.cpp
+    tests/scenario_game_rule_test.cpp
+    tests/range_distribution_manager_test.cpp
+    tests/suit_permutation_utils_test.cpp
+    tests/scenario_json_loader.cpp
+    tests/public_chance_cfr_integration_test.cpp
 )
 
 # Link your tests against Google Test AND your core library
@@ -228,8 +238,25 @@ endforeach()
 # ----------------------------------
 
 include(GoogleTest)
-# gtest_discover_tests(poker_solver_tests)
 
-# add_executable(test_driver build/test_driver.cpp tests/test_scenario_loader.cpp src/tools/PrivateRangeConverter.cpp)
-# target_include_directories(test_driver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/tests ${CMAKE_CURRENT_SOURCE_DIR}/third_party/json/single_include)
-# target_link_libraries(test_driver PRIVATE PokerSolverCore)
+add_executable(test_explorer
+    src/gui/explorer_verifier.cpp
+    src/gui/gto_strategy_explorer.cpp
+    src/gui/gto_strategy_explorer.h
+    src/gui/range_matrix_dialog.cpp
+    src/gui/range_matrix_dialog.h
+    src/gui/board_card_dialog.cpp
+    src/gui/board_card_dialog.h
+    ${UI_RESOURCE_FILES}
+)
+target_include_directories(test_explorer PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui
+)
+target_link_libraries(test_explorer
+    PRIVATE
+    PokerSolverCore
+    Qt6::Widgets
+    Qt6::Core
+    Qt6::Gui
+)
+target_link_options(test_explorer PRIVATE "-F/tmp/dummy_frameworks")

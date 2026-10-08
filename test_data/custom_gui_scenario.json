@@ -2,8 +2,10 @@
     "test_case_name": "CustomGuiScenarioTest",
     "description": "Custom test scenario based on GUI screenshots.",
     "solver_config": {
-      "iterations": 200,
-      "threads": 8
+      "iterations": 1000,
+      "threads": 8,
+      "target_exploitability": 0.5,
+      "exploitability_interval": 50
     },
     "game_rule": {
       "starting_round": "Flop",

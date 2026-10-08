@@ -1,0 +1,56 @@
+# Ignore build directory and all generated files
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Ignore Visual Studio Code settings (if not needed to be tracked)
+.vscode/
+
+# Ignore temporary files from various editors
+*~
+*.swp
+*.swo
+
+# Ignore OS-specific files
+.DS_Store
+
+# Ignore resource files
+*.qrc
+*.qrc.gz
+*.qrc.gz.part
+*.qrc.gz.part.gz
+*.qrc.gz.part.gz.part
+
+# Ignore cursor rules
+.cursorrules
+
+# Caches and runtime artifacts
+.cache/
+*.bin
+*_actual_output.json
+crash.ips
+test_combo
+test_canonical.py
+five_card_strength.txt
+
+# Ignore TypeScript files
+*.tsx
+
+# Ignore shell scripts
+*.sh
+
+# Ignore auto-generated files
+poker_solver_ui_autogen/
+poker_solver_ui
+
+# Ignore build directory
+build/
+
+# Ignore title files
+title=*
+
+# Ignore reference solver
+reference_solver

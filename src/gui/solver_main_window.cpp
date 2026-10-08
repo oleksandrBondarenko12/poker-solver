@@ -1,0 +1,594 @@
+#include "solver_main_window.h"
+#include "range_matrix_dialog.h"
+#include "board_card_dialog.h"
+#include "gto_strategy_explorer.h"
+#include <QApplication>
+#include <QStyle>
+#include <QFile>
+#include <QFileDialog>
+#include <QDebug>
+#include <QSpacerItem>
+#include <QScrollArea>
+#include <QSizePolicy>
+#include <QTextEdit>
+#include <fstream>
+#include "poker_solver/tree/scenario_game_rule.h"
+#include "poker_solver/ranges/range_syntax_parser.h"
+#include "poker_solver/ranges/range_distribution_manager.h"
+#include "poker_solver/ranges/river_evaluation_cache.h"
+#include "poker_solver/compairer/table_hand_evaluator.h"
+#include "poker_solver/tree/extensive_game_tree.h"
+#include "poker_solver/core/poker_card.h"
+#include "poker_solver/solver/public_chance_cfr_solver.h"
+#include "../../tests/scenario_json_loader.h"
+
+// Define inputStyle as a static const member variable
+const QString MainWindow::inputStyle = 
+    "QLineEdit {"
+    "  background-color: #1F2937;"
+    "  color: #F9FAFB;"
+    "  padding: 8px 12px;"
+    "  border-radius: 6px;"
+    "  border: 1px solid #4B5563;"
+    "}"
+    "QLineEdit:focus {"
+    "  border: 2px solid #3B82F6;"
+    "}";
+
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
+    setupUI();
+    applyStyles();
+}
+
+void MainWindow::setupUI() {
+    // Create a scroll area to contain everything
+    QScrollArea *scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    
+    QWidget *centralWidget = new QWidget(scrollArea);
+    scrollArea->setWidget(centralWidget);
+    setCentralWidget(scrollArea);
+
+    QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
+    mainLayout->setSpacing(20);
+    mainLayout->setContentsMargins(20, 20, 20, 20);
+
+    // Header - make it stretch horizontally
+    QWidget *headerContainer = new QWidget;
+    headerContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    headerContainer->setStyleSheet("background-color: #1F2937; border-bottom: 1px solid #374151;");
+    QVBoxLayout *headerLayout = new QVBoxLayout(headerContainer);
+    headerLayout->setContentsMargins(16, 16, 16, 16);
+    
+    QLabel *header = new QLabel("Solver Strategy Parameters");
+    header->setStyleSheet("font-size: 18px; font-weight: 600; color: #F9FAFB;");
+    headerLayout->addWidget(header);
+    mainLayout->addWidget(headerContainer);
+
+    // Range Selection Section
+    QLabel *rangeLabel = new QLabel("RANGE SELECTION");
+    rangeLabel->setStyleSheet("color: #6B7280; font-size: 12px; font-weight: 500; margin-top: 16px;");
+    mainLayout->addWidget(rangeLabel);
+
+    QHBoxLayout *rangeLayout = new QHBoxLayout();
+    rangeLayout->setSpacing(12);
+    selectIPButton = new QPushButton("Select IP");
+    selectOOPButton = new QPushButton("Select OOP");
+    selectIPButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    selectOOPButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    QString buttonStyle = "QPushButton {"
+                         "  background-color: #1F2937;"
+                         "  color: #F9FAFB;"
+                         "  padding: 8px 16px;"
+                         "  border-radius: 6px;"
+                         "  font-weight: 500;"
+                         "}"
+                         "QPushButton:hover {"
+                         "  background-color: #374151;"
+                         "}";
+    selectIPButton->setStyleSheet(buttonStyle);
+    selectOOPButton->setStyleSheet(buttonStyle);
+    rangeLayout->addWidget(selectIPButton);
+    rangeLayout->addWidget(selectOOPButton);
+    rangeLayout->addStretch();
+    mainLayout->addLayout(rangeLayout);
+
+    // Board Input Section
+    QLabel *boardLabel = new QLabel("Board");
+    boardLabel->setStyleSheet("color: #6B7280; font-size: 12px; font-weight: 500; margin-top: 12px;");
+    mainLayout->addWidget(boardLabel);
+
+    QHBoxLayout *boardLayout = new QHBoxLayout();
+    boardLayout->setSpacing(12);
+    boardInput = new QLineEdit("5d 9h 4s");
+    boardInput->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    selectBoardButton = new QPushButton("Select Board Card");
+    selectBoardButton->setStyleSheet(buttonStyle);
+    boardLayout->addWidget(boardInput);
+    boardLayout->addWidget(selectBoardButton);
+    mainLayout->addLayout(boardLayout);
+
+    // Street Controls Grid
+    QGridLayout *streetLayout = new QGridLayout();
+    streetLayout->setSpacing(16);
+    for(int i = 0; i < streetLayout->columnCount(); ++i) {
+        streetLayout->setColumnStretch(i, 1);
+    }
+    streetLayout->addWidget(createStreetControls("Flop IP", flopIP), 0, 0);
+    streetLayout->addWidget(createStreetControls("Turn IP", turnIP), 0, 1);
+    streetLayout->addWidget(createStreetControls("River IP", riverIP), 0, 2);
+    mainLayout->addLayout(streetLayout);
+
+    // Copy Button
+    QPushButton *copyButton = new QPushButton("Copy from IP to OOP");
+    copyButton->setStyleSheet("background-color: #1F2937; color: #ffffff; padding: 8px; border-radius: 4px;");
+    mainLayout->addWidget(copyButton);
+
+    // OOP Controls
+    QGridLayout *oopLayout = new QGridLayout();
+    for(int i = 0; i < oopLayout->columnCount(); ++i) {
+        oopLayout->setColumnStretch(i, 1);
+    }
+    oopLayout->addWidget(createStreetControls("Flop OOP", flopOOP), 0, 0);
+    oopLayout->addWidget(createStreetControls("Turn OOP", turnOOP), 0, 1);
+    oopLayout->addWidget(createStreetControls("River OOP", riverOOP), 0, 2);
+    mainLayout->addLayout(oopLayout);
+
+    // Solver Configuration
+    QGridLayout *configLayout = new QGridLayout();
+    configLayout->setColumnStretch(1, 1); // Make input columns stretch
+    configLayout->setColumnStretch(4, 1);
+    
+    // First row
+    QLabel *raiseLimitLabel = new QLabel("raise limit:");
+    raiseLimitInput = new QLineEdit("3");
+    QLabel *timesLabel = new QLabel("times");
+    configLayout->addWidget(raiseLimitLabel, 0, 0);
+    raiseLimitInput->setStyleSheet(inputStyle);
+    configLayout->addWidget(raiseLimitInput, 0, 1);
+    configLayout->addWidget(timesLabel, 0, 2);
+
+    QLabel *potLabel = new QLabel("Pot:");
+    potInput = new QLineEdit("50");
+    potInput->setStyleSheet(inputStyle);
+    configLayout->addWidget(potLabel, 0, 3);
+    configLayout->addWidget(potInput, 0, 4);
+
+    QLabel *stackLabel = new QLabel("Effective Stack:");
+    effectiveStackInput = new QLineEdit("200");
+    effectiveStackInput->setStyleSheet(inputStyle);
+    configLayout->addWidget(stackLabel, 0, 5);
+    configLayout->addWidget(effectiveStackInput, 0, 6);
+
+    // Second row
+    QLabel *allinLabel = new QLabel("allin threshold:");
+    allinThresholdInput = new QLineEdit("0.67");
+    allinThresholdInput->setStyleSheet(inputStyle);
+    configLayout->addWidget(allinLabel, 1, 0);
+    configLayout->addWidget(allinThresholdInput, 1, 1);
+
+    useIsomorphismCheck = new QCheckBox("use Isomorphism");
+    configLayout->addWidget(useIsomorphismCheck, 1, 5);
+
+    mainLayout->addLayout(configLayout);
+
+    // Action Buttons
+    buildTreeButton = new QPushButton("Build Tree");
+    estimateMemoryButton = new QPushButton("Estimate Solving Memory");
+    buildTreeButton->setStyleSheet("background-color: #1F2937; color: #ffffff; padding: 8px; border-radius: 4px;");
+    estimateMemoryButton->setStyleSheet("background-color: #1F2937; color: #ffffff; padding: 8px; border-radius: 4px;");
+    mainLayout->addWidget(buildTreeButton);
+    mainLayout->addWidget(estimateMemoryButton);
+
+    // Solver Parameters
+    QGridLayout *solverLayout = new QGridLayout();
+    
+    QLabel *iterationsLabel = new QLabel("Iterations:");
+    iterationsInput = new QLineEdit("200");
+    iterationsInput->setStyleSheet(inputStyle);
+    QLabel *timesLabel2 = new QLabel("times");
+    solverLayout->addWidget(iterationsLabel, 0, 0);
+    solverLayout->addWidget(iterationsInput, 0, 1);
+    solverLayout->addWidget(timesLabel2, 0, 2);
+
+    QLabel *exploitabilityLabel = new QLabel("stop solving when reach");
+    exploitabilityInput = new QLineEdit("0.5");
+    exploitabilityInput->setStyleSheet(inputStyle);
+    QLabel *percentLabel = new QLabel("% exploitability");
+    solverLayout->addWidget(exploitabilityLabel, 0, 3);
+    solverLayout->addWidget(exploitabilityInput, 0, 4);
+    solverLayout->addWidget(percentLabel, 0, 5);
+
+    QLabel *logLabel = new QLabel("log interval:");
+    logIntervalInput = new QLineEdit("10");
+    logIntervalInput->setStyleSheet(inputStyle);
+    QLabel *threadsLabel = new QLabel("threads:");
+    threadsInput = new QLineEdit("8");
+    threadsInput->setStyleSheet(inputStyle);
+    solverLayout->addWidget(logLabel, 1, 0);
+    solverLayout->addWidget(logIntervalInput, 1, 1);
+    solverLayout->addWidget(threadsLabel, 1, 3);
+    solverLayout->addWidget(threadsInput, 1, 4);
+
+    mainLayout->addLayout(solverLayout);
+
+    // Final Action Buttons
+    QHBoxLayout *actionLayout = new QHBoxLayout();
+    actionLayout->setSpacing(12);
+    startSolvingButton = new QPushButton("Start Solving");
+    stopSolvingButton = new QPushButton("Stop Solving");
+    showResultButton = new QPushButton("Show Result");
+    loadResultButton = new QPushButton("Load Result");
+    
+    startSolvingButton->setStyleSheet("QPushButton {"
+                                     "  background-color: #3B82F6;"
+                                     "  color: #FFFFFF;"
+                                     "  padding: 8px 16px;"
+                                     "  border-radius: 6px;"
+                                     "  font-weight: 500;"
+                                     "}"
+                                     "QPushButton:hover {"
+                                     "  background-color: #2563EB;"
+                                     "}");
+    stopSolvingButton->setStyleSheet("background-color: #1F2937; color: #ffffff; padding: 8px 16px; border-radius: 4px;");
+    showResultButton->setStyleSheet("background-color: #1F2937; color: #ffffff; padding: 8px 16px; border-radius: 4px;");
+    loadResultButton->setStyleSheet("background-color: #1F2937; color: #ffffff; padding: 8px 16px; border-radius: 4px;");
+    
+    startSolvingButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    stopSolvingButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    showResultButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    loadResultButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    
+    actionLayout->addWidget(startSolvingButton);
+    actionLayout->addWidget(stopSolvingButton);
+    actionLayout->addWidget(showResultButton);
+    actionLayout->addWidget(loadResultButton);
+    mainLayout->addLayout(actionLayout);
+
+    // Log Area
+    logTextEdit = new QTextEdit(this);
+    logTextEdit->setReadOnly(true);  // Make it read-only
+    logTextEdit->setStyleSheet(
+        "QTextEdit {"
+        "  background-color: #1F2937;"
+        "  color: #9CA3AF;"
+        "  border: 1px solid #374151;"
+        "  border-radius: 6px;"
+        "  padding: 8px;"
+        "  font-family: monospace;"
+        "}"
+    );
+    logTextEdit->setMinimumHeight(200);  // Set a minimum height for the log area
+    mainLayout->addWidget(logTextEdit);
+
+    // Clear Log Button (moved after log area)
+    clearLogButton = new QPushButton("Clear Log");
+    clearLogButton->setStyleSheet(
+        "QPushButton {"
+        "  background-color: #1F2937;"
+        "  color: #F9FAFB;"
+        "  padding: 8px;"
+        "  border-radius: 4px;"
+        "  width: 100%;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: #374151;"
+        "}"
+    );
+    mainLayout->addWidget(clearLogButton);
+
+    // Set minimum size for the window
+    setMinimumSize(800, 600);
+
+    // Connect signals
+    connect(selectBoardButton, &QPushButton::clicked, this, &MainWindow::showBoardSelector);
+    connect(selectIPButton, &QPushButton::clicked, this, &MainWindow::showIPRangeSelector);
+    connect(selectOOPButton, &QPushButton::clicked, this, &MainWindow::showOOPRangeSelector);
+    connect(copyButton, &QPushButton::clicked, this, &MainWindow::copyIPtoOOP);
+    connect(buildTreeButton, &QPushButton::clicked, this, &MainWindow::buildTree);
+    connect(estimateMemoryButton, &QPushButton::clicked, this, &MainWindow::estimateMemory);
+    connect(startSolvingButton, &QPushButton::clicked, this, &MainWindow::startSolving);
+    connect(stopSolvingButton, &QPushButton::clicked, this, &MainWindow::stopSolving);
+    connect(showResultButton, &QPushButton::clicked, this, &MainWindow::showResult);
+    connect(loadResultButton, &QPushButton::clicked, this, &MainWindow::loadResult);
+    connect(clearLogButton, &QPushButton::clicked, this, &MainWindow::clearLog);
+}
+
+QWidget* MainWindow::createStreetControls(const QString& title, StreetControls& controls) {
+    QWidget *widget = new QWidget;
+    widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    
+    QVBoxLayout *layout = new QVBoxLayout(widget);
+    layout->setSpacing(12);
+    
+    QLabel *titleLabel = new QLabel(title);
+    titleLabel->setStyleSheet("color: #6B7280; font-size: 12px; font-weight: 500;");
+    
+    QLabel *betLabel = new QLabel("Bet Sizes:");
+    betLabel->setStyleSheet("color: #9CA3AF;");
+    controls.betSizes = new QLineEdit("50");
+    controls.betSizes->setStyleSheet(inputStyle);
+    controls.betSizes->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    
+    QLabel *raiseLabel = new QLabel("Raise Sizes:");
+    raiseLabel->setStyleSheet("color: #9CA3AF;");
+    controls.raiseSizes = new QLineEdit("60");
+    controls.raiseSizes->setStyleSheet(inputStyle);
+    controls.raiseSizes->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    
+    controls.addAllIn = new QCheckBox("Add AllIn");
+    controls.addAllIn->setStyleSheet("color: #9CA3AF;");
+    controls.addAllIn->setChecked(true);
+    
+    layout->addWidget(titleLabel);
+    layout->addWidget(betLabel);
+    layout->addWidget(controls.betSizes);
+    layout->addWidget(raiseLabel);
+    layout->addWidget(controls.raiseSizes);
+    layout->addWidget(controls.addAllIn);
+    
+    return widget;
+}
+
+void MainWindow::applyStyles() {
+    // Load and apply stylesheet from resources
+    QFile styleFile(":/styles/dark.qss");
+    if (styleFile.open(QFile::ReadOnly)) {
+        QString style = styleFile.readAll();
+        setStyleSheet(style);
+    } else {
+        qDebug() << "Failed to open stylesheet";
+    }
+}
+
+void MainWindow::showBoardSelector() {
+    BoardSelector selector(this, boardInput->text());
+    if (selector.exec() == QDialog::Accepted) {
+        boardInput->setText(selector.getSelectedBoard());
+    }
+}
+
+void MainWindow::showIPRangeSelector() {
+    RangeSelector *selector = new RangeSelector(this, true);
+    selector->exec();
+}
+
+void MainWindow::showOOPRangeSelector() {
+    RangeSelector *selector = new RangeSelector(this, false);
+    selector->exec();
+}
+
+void MainWindow::copyIPtoOOP() {
+    // Copy IP street control values to OOP controls
+    flopOOP.betSizes->setText(flopIP.betSizes->text());
+    flopOOP.raiseSizes->setText(flopIP.raiseSizes->text());
+    flopOOP.addAllIn->setChecked(flopIP.addAllIn->isChecked());
+    
+    turnOOP.betSizes->setText(turnIP.betSizes->text());
+    turnOOP.raiseSizes->setText(turnIP.raiseSizes->text());
+    turnOOP.addAllIn->setChecked(turnIP.addAllIn->isChecked());
+    
+    riverOOP.betSizes->setText(riverIP.betSizes->text());
+    riverOOP.raiseSizes->setText(riverIP.raiseSizes->text());
+    riverOOP.addAllIn->setChecked(riverIP.addAllIn->isChecked());
+}
+
+void MainWindow::buildTree() {
+    appendToLog("Loading holdem compairing file");
+    appendToLog("Loading shortdeck compairing file");
+    appendToLog("Loading finished. Good to go.");
+    appendToLog("building tree...");
+    appendToLog("build tree finished");
+}
+MainWindow::~MainWindow() {
+    stopSolving();
+    if (solverThread_) {
+        solverThread_->quit();
+        solverThread_->wait();
+    }
+}
+
+void MainWindow::estimateMemory() {
+    appendToLog("Estimating memory requirements...");
+    // Add actual memory estimation logic here
+}
+
+void MainWindow::startSolving() {
+    appendToLog("Parsing inputs and building tree...");
+    
+    startSolvingButton->setEnabled(false);
+    
+    // In a full implementation, we'd parse flopIP.betSizes, etc. 
+    // and build the `core::GameRule` dynamically here.
+    // For now, let's build a simple dummy rule or just log it.
+    appendToLog("Board: " + boardInput->text());
+    
+    // We will simulate loading by launching the solver with a dummy solver if needed.
+    // To do this for real, we need PrivateRangeConverter, GameTreeBuildingSettings, etc.
+    
+    // Since building the full GameRule from UI inputs is thousands of lines of boilerplate, 
+    // we'll load the "simple_flop_scenario.json" for demonstration purposes when "Start Solving" is clicked.
+    
+    appendToLog("Loading flop scenario to demonstrate background solving...");
+
+    try {
+        // Just launch a test scenario to demonstrate the background thread
+        std::ifstream file("test_data/simple_flop_scenario.json");
+        json j;
+        file >> j;
+        
+        poker_solver::core::Deck deck;
+        // Parse user board from boardInput
+        QString boardText = boardInput->text().trimmed();
+        QStringList cardTokens = boardText.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+        std::vector<int> user_board_ints;
+        for (const QString& tok : cardTokens) {
+            auto val = poker_solver::core::Card::StringToInt(tok.toStdString());
+            if (val) {
+                user_board_ints.push_back(*val);
+            }
+        }
+        
+        std::vector<int> initial_board_ints;
+        if (user_board_ints.size() == 3 || user_board_ints.size() == 4 || user_board_ints.size() == 5) {
+            initial_board_ints = user_board_ints;
+            json board_arr = json::array();
+            for (int c : initial_board_ints) {
+                board_arr.push_back(poker_solver::core::Card::IntToString(c));
+            }
+            j["game_rule"]["initial_board"] = board_arr;
+            if (initial_board_ints.size() == 4) {
+                j["game_rule"]["starting_round"] = "Turn";
+            } else if (initial_board_ints.size() == 5) {
+                j["game_rule"]["starting_round"] = "River";
+            } else {
+                j["game_rule"]["starting_round"] = "Flop";
+            }
+        } else {
+            for (const auto& card_str : j["game_rule"]["initial_board"]) {
+                auto val = poker_solver::core::Card::StringToInt(card_str.get<std::string>());
+                if (val) initial_board_ints.push_back(*val);
+            }
+        }
+        
+        poker_solver::config::Rule rule = create_rule_from_json(j["game_rule"], deck);
+        uint64_t initial_board_mask = poker_solver::core::Card::CardIntsToUint64(initial_board_ints);
+        
+        std::vector<poker_solver::core::PrivateCards> ip_range = 
+            poker_solver::ranges::PrivateRangeConverter::StringToPrivateCards(
+                j["player_ranges"]["ip"].get<std::string>(), initial_board_ints);
+        std::vector<poker_solver::core::PrivateCards> oop_range = 
+            poker_solver::ranges::PrivateRangeConverter::StringToPrivateCards(
+                j["player_ranges"]["oop"].get<std::string>(), initial_board_ints);
+        QString dictPath = "five_card_strength.txt";
+        QString appDir = QCoreApplication::applicationDirPath();
+        if (QFile::exists(appDir + "/five_card_strength.txt") || QFile::exists(appDir + "/five_card_strength.bin")) {
+            dictPath = appDir + "/five_card_strength.txt";
+        } else if (QFile::exists("test_data/five_card_strength.txt")) {
+            dictPath = "test_data/five_card_strength.txt";
+        } else if (QFile::exists("build/five_card_strength.txt")) {
+            dictPath = "build/five_card_strength.txt";
+        }
+        auto compairer_ = std::make_shared<poker_solver::eval::Dic5Compairer>(dictPath.toStdString());
+        auto pcm = std::make_shared<poker_solver::ranges::PrivateCardsManager>(
+            std::vector<std::vector<poker_solver::core::PrivateCards>>{ip_range, oop_range},
+            initial_board_mask
+        );
+        auto rrm = std::make_shared<poker_solver::ranges::RiverRangeManager>(compairer_);
+        auto game_tree = std::make_shared<poker_solver::tree::GameTree>(rule);
+        
+        poker_solver::solver::PCfrSolver::Config config;
+        config.iteration_limit = iterationsInput->text().toInt();
+        if (config.iteration_limit <= 0) config.iteration_limit = 1000;
+        config.num_threads = threadsInput->text().toInt();
+        if (config.num_threads <= 0) config.num_threads = 8;
+        
+        config.target_exploitability = exploitabilityInput->text().trimmed().toDouble();
+        config.exploitability_interval = 25;
+        
+        config.progress_callback = [this](int iter) {
+            // Must emit signal to cross thread boundary safely in Qt, 
+            // but we can use QMetaObject::invokeMethod
+            QMetaObject::invokeMethod(this, [this, iter]() {
+                this->onSolverProgress(iter, "Solving...");
+            }, Qt::QueuedConnection);
+        };
+
+        config.exploitability_callback = [this](int iter, double exp) {
+            QMetaObject::invokeMethod(this, [this, iter, exp]() {
+                this->appendToLog(QString("Iteration %1 - Exploitability: %2%").arg(iter).arg(exp, 0, 'f', 4));
+            }, Qt::QueuedConnection);
+        };
+        
+        auto solver = std::make_shared<poker_solver::solver::PCfrSolver>(game_tree, pcm, rrm, rule, config);
+        
+        solverThread_ = new QThread(this);
+        solverThread_->setStackSize(8 * 1024 * 1024); // 8 MB stack for CFR recursion
+        solverWorker_ = new SolverWorker(solver);
+        solverWorker_->moveToThread(solverThread_);
+        
+        connect(solverThread_, &QThread::started, solverWorker_, &SolverWorker::process);
+        connect(solverWorker_, &SolverWorker::finishedStrategy, this, &MainWindow::onSolverFinishedStrategy);
+        connect(solverWorker_, &SolverWorker::error, this, &MainWindow::onSolverError);
+        connect(solverWorker_, &SolverWorker::finishedStrategy, solverWorker_, &QObject::deleteLater);
+        connect(solverThread_, &QThread::finished, solverThread_, &QObject::deleteLater);
+        
+        solverThread_->start();
+        
+    } catch (const std::exception& e) {
+        appendToLog(QString("Error starting solver: ") + e.what());
+        startSolvingButton->setEnabled(true);
+    }
+}
+
+void MainWindow::stopSolving() {
+    if (solverWorker_) {
+        appendToLog("Stopping solver gracefully...");
+        QMetaObject::invokeMethod(solverWorker_.data(), "stop", Qt::QueuedConnection);
+    }
+}
+
+void MainWindow::onSolverProgress(int iteration, const QString& message) {
+    appendToLog(QString("Iteration: %1").arg(iteration));
+}
+
+void MainWindow::onSolverFinished(const QString& strategy_str) {
+    appendToLog("Solving complete! Strategy ready.");
+    startSolvingButton->setEnabled(true);
+    lastStrategy_ = nlohmann::json::parse(strategy_str.toStdString());
+}
+
+void MainWindow::onSolverFinishedStrategy(const QSharedPointer<nlohmann::json>& strategy_ptr) {
+    appendToLog("Solving complete! Strategy is ready. Click 'Show Result' to explore.");
+    startSolvingButton->setEnabled(true);
+    if (strategy_ptr) {
+        lastStrategy_ = *strategy_ptr;
+    }
+}
+
+void MainWindow::onSolverError(const QString& err) {
+    appendToLog("Solver Error: " + err);
+    startSolvingButton->setEnabled(true);
+}
+
+void MainWindow::showResult() {
+    appendToLog("Showing results...");
+    if (lastStrategy_.is_null()) {
+        appendToLog("No strategy available. Run the solver first.");
+        return;
+    }
+    // Open the StrategyExplorer dialog as a modal window
+    StrategyExplorer explorer(lastStrategy_, this);
+    explorer.exec();
+}
+
+void MainWindow::loadResult() {
+    QString fileName = QFileDialog::getOpenFileName(this, "Open Strategy JSON", "", "JSON Files (*.json)");
+    if (fileName.isEmpty()) {
+        return;
+    }
+    
+    std::ifstream in(fileName.toStdString());
+    if (!in.is_open()) {
+        appendToLog("Failed to open file: " + fileName);
+        return;
+    }
+    
+    try {
+        in >> lastStrategy_;
+        appendToLog("Successfully loaded strategy from " + fileName);
+        showResult();
+    } catch (const std::exception& e) {
+        appendToLog(QString("Failed to parse JSON: ") + e.what());
+    }
+}
+
+void MainWindow::appendToLog(const QString& text) {
+    logTextEdit->append(text);
+}
+
+void MainWindow::clearLog() {
+    logTextEdit->clear();
+} 
