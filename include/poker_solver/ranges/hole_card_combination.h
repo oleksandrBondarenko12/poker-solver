@@ -12,10 +12,10 @@ namespace poker_solver {
 namespace core {
 
 // Represents a player's two private hole cards, along with an associated weight.
-class PrivateCards {
+class PrivateHand {
  public:
-  PrivateCards();
-  PrivateCards(int card1_int, int card2_int, double weight = 1.0);
+  PrivateHand();
+  PrivateHand(int card1_int, int card2_int, double weight = 1.0);
 
   // Modern snake_case accessors
   int card1_int() const { return card1_int_; }
@@ -40,9 +40,9 @@ class PrivateCards {
   std::pair<int, int> GetCardInts() const { return card_ints(); }
 
   // Operators
-  bool operator==(const PrivateCards& other) const;
-  bool operator!=(const PrivateCards& other) const;
-  bool operator<(const PrivateCards& other) const;
+  bool operator==(const PrivateHand& other) const;
+  bool operator!=(const PrivateHand& other) const;
+  bool operator<(const PrivateHand& other) const;
 
  private:
   void initialize(int c1, int c2, double w);
@@ -54,15 +54,16 @@ class PrivateCards {
   uint64_t board_mask_;
 };
 
-using HoleCardCombination = PrivateCards;
+using PrivateCards = PrivateHand;
+using HoleCardCombination = PrivateHand;
 
 } // namespace core
 } // namespace poker_solver
 
 namespace std {
 template <>
-struct hash<poker_solver::core::PrivateCards> {
-  size_t operator()(const poker_solver::core::PrivateCards& pc) const {
+struct hash<poker_solver::core::PrivateHand> {
+  size_t operator()(const poker_solver::core::PrivateHand& pc) const {
     return std::hash<uint64_t>()(pc.board_mask());
   }
 };

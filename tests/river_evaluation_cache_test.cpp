@@ -1,19 +1,19 @@
 #include "gtest/gtest.h"
-#include "poker_solver/ranges/river_evaluation_cache.h" // Adjust path
-#include "poker_solver/compairer/table_hand_evaluator.h"      // Adjust path
-#include "poker_solver/ranges/hole_card_combination.h"       // Adjust path
-#include "poker_solver/core/poker_card.h"              // Adjust path
+#include "poker_solver/ranges/river_evaluation_cache.h"
+#include "poker_solver/evaluator/table_hand_evaluator.h"
+#include "poker_solver/ranges/hole_card_combination.h"
+#include "poker_solver/core/poker_card.h"
 #include <vector>
 #include <memory>
 #include <stdexcept>
 #include <optional>
-#include <string>        // Include string for error message concatenation
-#include <sstream>       // Include sstream for HandVectorToString helper
-#include <iostream>      // For potential debug output
+#include <string>
+#include <sstream>
+#include <iostream>
 
 // Use namespaces
 using namespace poker_solver::core;
-using namespace poker_solver::eval; // For Dic5Compairer
+using namespace poker_solver::eval;
 using namespace poker_solver::ranges;
 
 // Test fixture for RiverRangeManager tests
@@ -21,21 +21,19 @@ class RiverRangeManagerTest : public ::testing::Test {
  protected:
   // Path to the dictionary file (relative to build/executable directory)
   const std::string kDictionaryPath = "five_card_strength.txt";
-  std::shared_ptr<Dic5Compairer> compairer_; // Use concrete type for setup
+  std::shared_ptr<TableHandEvaluator> evaluator_;
   std::unique_ptr<RiverRangeManager> manager_;
 
   // Sample ranges and boards
-  std::vector<PrivateCards> range_p0_;
-  std::vector<PrivateCards> range_p1_;
+  std::vector<PrivateHand> range_p0_;
+  std::vector<PrivateHand> range_p1_;
   std::vector<int> board_ints_;
   uint64_t board_mask_;
 
   void SetUp() override {
     try {
-      // Ensure the dictionary file exists relative to where tests run (build dir)
-      // The CMake custom command should handle copying it there.
-      compairer_ = std::make_shared<Dic5Compairer>(kDictionaryPath);
-      manager_ = std::make_unique<RiverRangeManager>(compairer_);
+      evaluator_ = std::make_shared<TableHandEvaluator>(kDictionaryPath);
+      manager_ = std::make_unique<RiverRangeManager>(evaluator_);
 
       // Create some sample ranges (adjust as needed)
       // Player 0: AcKd, AhAs, 7h6h, 2c2d
@@ -83,11 +81,11 @@ class RiverRangeManagerTest : public ::testing::Test {
   }
 
   // Helper to find a specific hand in the results
-  std::optional<RiverCombs> FindHandInResults(
-      const std::vector<RiverCombs>& results,
-      const PrivateCards& target_hand) {
+  std::optional<EvaluatedRiverCombo> FindHandInResults(
+      const std::vector<EvaluatedRiverCombo>& results,
+      const PrivateHand& target_hand) {
       for(const auto& combo : results) {
-          if (combo.private_cards == target_hand) {
+          if (combo.private_hand == target_hand) {
               return combo;
           }
       }
@@ -108,9 +106,9 @@ class RiverRangeManagerTest : public ::testing::Test {
 
 // --- Tests ---
 
-TEST(RiverRangeManagerConstructorTest, NullCompairer) {
-    std::shared_ptr<Dic5Compairer> null_compairer = nullptr;
-    EXPECT_THROW(RiverRangeManager mgr(null_compairer), std::invalid_argument);
+TEST(RiverRangeManagerConstructorTest, NullEvaluator) {
+    std::shared_ptr<TableHandEvaluator> null_evaluator = nullptr;
+    EXPECT_THROW(RiverRangeManager mgr(null_evaluator), std::invalid_argument);
 }
 
 TEST_F(RiverRangeManagerTest, BasicCalculationAndFiltering) {
@@ -123,41 +121,41 @@ TEST_F(RiverRangeManagerTest, BasicCalculationAndFiltering) {
     EXPECT_EQ(results_p0.size(), 4); // Expect all 4 hands
 
     // Check if 2c2d IS present (it shouldn't be filtered)
-    PrivateCards hand_22(Card::StringToInt("2c").value(), Card::StringToInt("2d").value());
+    PrivateHand hand_22(Card::StringToInt("2c").value(), Card::StringToInt("2d").value());
     auto combo_22 = FindHandInResults(results_p0, hand_22);
     EXPECT_TRUE(combo_22.has_value()); // 22 should be present
     // Check rank and index for 22
     if(combo_22.has_value()) {
-        int expected_rank_22 = compairer_->GetBestRankForCards(StringsToInts({"2c", "2d", "5h", "Js", "Qc", "2s", "Td"})); // Trips
+        int expected_rank_22 = evaluator_->GetBestRankForCards(StringsToInts({"2c", "2d", "5h", "Js", "Qc", "2s", "Td"})); // Trips
         EXPECT_EQ(combo_22->rank, expected_rank_22);
         EXPECT_EQ(combo_22->original_range_index, 3); // Was the 3rd element in range_p0_
     }
 
 
     // Check if AKo is present and check its rank and original index
-    PrivateCards hand_ako(Card::StringToInt("Ac").value(), Card::StringToInt("Kd").value());
+    PrivateHand hand_ako(Card::StringToInt("Ac").value(), Card::StringToInt("Kd").value());
     auto combo_ako = FindHandInResults(results_p0, hand_ako);
     ASSERT_TRUE(combo_ako.has_value());
-    EXPECT_EQ(combo_ako->private_cards, hand_ako);
-    int expected_rank_ako = compairer_->GetBestRankForCards(StringsToInts({"Ac", "Kd", "5h", "Js", "Qc", "2s", "Td"})); // Straight
+    EXPECT_EQ(combo_ako->private_hand, hand_ako);
+    int expected_rank_ako = evaluator_->GetBestRankForCards(StringsToInts({"Ac", "Kd", "5h", "Js", "Qc", "2s", "Td"})); // Straight
     EXPECT_EQ(combo_ako->rank, expected_rank_ako);
     EXPECT_EQ(combo_ako->original_range_index, 0);
 
      // Check if AA is present and check its rank and original index
-    PrivateCards hand_aa(Card::StringToInt("Ah").value(), Card::StringToInt("As").value());
+    PrivateHand hand_aa(Card::StringToInt("Ah").value(), Card::StringToInt("As").value());
     auto combo_aa = FindHandInResults(results_p0, hand_aa);
     ASSERT_TRUE(combo_aa.has_value());
-    EXPECT_EQ(combo_aa->private_cards, hand_aa);
-    int expected_rank_aa = compairer_->GetBestRankForCards(StringsToInts({"Ah", "As", "5h", "Js", "Qc", "2s", "Td"})); // Pair AA
+    EXPECT_EQ(combo_aa->private_hand, hand_aa);
+    int expected_rank_aa = evaluator_->GetBestRankForCards(StringsToInts({"Ah", "As", "5h", "Js", "Qc", "2s", "Td"})); // Pair AA
     EXPECT_EQ(combo_aa->rank, expected_rank_aa);
     EXPECT_EQ(combo_aa->original_range_index, 1);
 
      // Check if 76s is present and check its rank and original index
-    PrivateCards hand_76s(Card::StringToInt("7h").value(), Card::StringToInt("6h").value());
+    PrivateHand hand_76s(Card::StringToInt("7h").value(), Card::StringToInt("6h").value());
     auto combo_76s = FindHandInResults(results_p0, hand_76s);
     ASSERT_TRUE(combo_76s.has_value());
-    EXPECT_EQ(combo_76s->private_cards, hand_76s);
-    int expected_rank_76s = compairer_->GetBestRankForCards(StringsToInts({"7h", "6h", "5h", "Js", "Qc", "2s", "Td"})); // Q-High
+    EXPECT_EQ(combo_76s->private_hand, hand_76s);
+    int expected_rank_76s = evaluator_->GetBestRankForCards(StringsToInts({"7h", "6h", "5h", "Js", "Qc", "2s", "Td"})); // Q-High
     EXPECT_EQ(combo_76s->rank, expected_rank_76s);
     EXPECT_EQ(combo_76s->original_range_index, 2);
 }
@@ -170,16 +168,16 @@ TEST_F(RiverRangeManagerTest, SortingOrder) {
      ASSERT_EQ(results_p0.size(), 4); // Expect all 4 hands
 
      // Get ranks
-     int rank_ako = compairer_->GetHandRank(Card::CardsToUint64({Card("Ac"), Card("Kd")}), board_mask_); // Straight
-     int rank_aa = compairer_->GetHandRank(Card::CardsToUint64({Card("Ah"), Card("As")}), board_mask_);  // Pair AA
-     int rank_76s = compairer_->GetHandRank(Card::CardsToUint64({Card("7h"), Card("6h")}), board_mask_); // Q-High
-     int rank_22 = compairer_->GetHandRank(Card::CardsToUint64({Card("2c"), Card("2d")}), board_mask_); // Trips 2s
+     int rank_ako = evaluator_->GetHandRank(Card::CardsToUint64({Card("Ac"), Card("Kd")}), board_mask_); // Straight
+     int rank_aa = evaluator_->GetHandRank(Card::CardsToUint64({Card("Ah"), Card("As")}), board_mask_);  // Pair AA
+     int rank_76s = evaluator_->GetHandRank(Card::CardsToUint64({Card("7h"), Card("6h")}), board_mask_); // Q-High
+     int rank_22 = evaluator_->GetHandRank(Card::CardsToUint64({Card("2c"), Card("2d")}), board_mask_); // Trips 2s
 
      // Verify ranks are valid
-     ASSERT_NE(rank_ako, Dic5Compairer::kInvalidRank) << "AKo rank invalid";
-     ASSERT_NE(rank_aa, Dic5Compairer::kInvalidRank) << "AA rank invalid";
-     ASSERT_NE(rank_76s, Dic5Compairer::kInvalidRank) << "76s rank invalid";
-     ASSERT_NE(rank_22, Dic5Compairer::kInvalidRank) << "22 rank invalid";
+     ASSERT_NE(rank_ako, TableHandEvaluator::kInvalidRank) << "AKo rank invalid";
+     ASSERT_NE(rank_aa, TableHandEvaluator::kInvalidRank) << "AA rank invalid";
+     ASSERT_NE(rank_76s, TableHandEvaluator::kInvalidRank) << "76s rank invalid";
+     ASSERT_NE(rank_22, TableHandEvaluator::kInvalidRank) << "22 rank invalid";
 
      // Expected Strength Order: Straight < Trips < Pair < High Card
      // Expected Rank Number Order: rank_ako < rank_22 < rank_aa < rank_76s

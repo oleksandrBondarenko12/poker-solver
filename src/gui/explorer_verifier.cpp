@@ -3,7 +3,7 @@
 #include <QFile>
 #include <iostream>
 #include <fstream>
-#include "poker_solver/json.hpp"
+#include <nlohmann/json.hpp>
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);

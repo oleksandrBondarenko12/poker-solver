@@ -4,7 +4,7 @@
 #include "poker_solver/solver/public_chance_cfr_solver.h"
 #include "poker_solver/solver/exploitability_calculator.h"
 #include "poker_solver/solver/information_set_strategy.h"
-#include "poker_solver/compairer/table_hand_evaluator.h"
+#include "poker_solver/evaluator/table_hand_evaluator.h"
 #include "poker_solver/ranges/range_distribution_manager.h"
 #include "poker_solver/ranges/river_evaluation_cache.h"
 #include "poker_solver/tree/extensive_game_tree.h"
@@ -125,10 +125,10 @@ private:
     size_t num_hands_;
 };
 
-class PCfrSolverIntegrationTest : public ::testing::Test {
+class CfrPlusSolverIntegrationTest : public ::testing::Test {
 protected:
     core::Deck deck_;
-    std::shared_ptr<eval::Dic5Compairer> compairer_;
+    std::shared_ptr<eval::TableHandEvaluator> evaluator_;
 
     // This will be managed per test case by LoadAndSetupSolverForScenario
     std::unique_ptr<TestScenario> current_scenario_;
@@ -137,14 +137,14 @@ protected:
     void SetUp() override {
         try {
             // Path relative to build/test execution directory
-            compairer_ = std::make_shared<eval::Dic5Compairer>("five_card_strength.txt");
+            evaluator_ = std::make_shared<eval::TableHandEvaluator>("five_card_strength.txt");
         } catch (const std::exception& e) {
-            FAIL() << "Fixture SetUp failed to load compairer: " << e.what();
+            FAIL() << "Fixture SetUp failed to load evaluator: " << e.what();
         }
     }
 
     // Make LoadAndSetupScenario return the solver
-    std::unique_ptr<solver::PCfrSolver> LoadAndSetupSolverForScenario(const std::string& scenario_filepath) {
+    std::unique_ptr<solver::CfrPlusSolver> LoadAndSetupSolverForScenario(const std::string& scenario_filepath) {
         // Load the scenario structure using the helper
         // The TestScenario constructor will parse the JSON once.
         try {
@@ -160,18 +160,18 @@ protected:
             return nullptr;
         }
 
-        uint64_t initial_board_mask = core::Card::CardIntsToUint64(current_scenario_->initial_board_ints_for_pcm);
+        uint64_t initial_board_mask = core::Card::CardIntsToUint64(current_scenario_->initial_board_ints_for_phm);
 
-        std::shared_ptr<ranges::PrivateCardsManager> pcm;
+        std::shared_ptr<ranges::PrivateHandManager> phm;
         std::shared_ptr<ranges::RiverRangeManager> rrm;
         std::shared_ptr<tree::GameTree> game_tree;
 
         try {
-            pcm = std::make_shared<ranges::PrivateCardsManager>(
-                std::vector<std::vector<core::PrivateCards>>{current_scenario_->range_ip, current_scenario_->range_oop},
+            phm = std::make_shared<ranges::PrivateHandManager>(
+                std::vector<std::vector<core::PrivateHand>>{current_scenario_->range_ip, current_scenario_->range_oop},
                 initial_board_mask
             );
-            rrm = std::make_shared<ranges::RiverRangeManager>(compairer_);
+            rrm = std::make_shared<ranges::RiverRangeManager>(evaluator_);
             game_tree = std::make_shared<tree::GameTree>(current_scenario_->game_rule);
         } catch (const std::exception& e) {
             ADD_FAILURE() << "Failed to create managers or game tree for scenario '"
@@ -180,11 +180,11 @@ protected:
         }
 
         try {
-            return std::make_unique<solver::PCfrSolver>(
-                game_tree, pcm, rrm, current_scenario_->game_rule, current_scenario_->solver_config
+            return std::make_unique<solver::CfrPlusSolver>(
+                game_tree, phm, rrm, current_scenario_->game_rule, current_scenario_->solver_config
             );
         } catch (const std::exception& e) {
-            ADD_FAILURE() << "Failed to create PCfrSolver for scenario '"
+            ADD_FAILURE() << "Failed to create CfrPlusSolver for scenario '"
                           << current_scenario_->test_case_name << "': " << e.what();
             return nullptr;
         }
@@ -192,9 +192,9 @@ protected:
 };
 
 // Test using the "simple_flop_scenario.json"
-TEST_F(PCfrSolverIntegrationTest, SimpleRiverTest) {
+TEST_F(CfrPlusSolverIntegrationTest, SimpleRiverTest) {
     std::string scenario_file = "test_data/simple_river_scenario.json";
-    std::unique_ptr<solver::PCfrSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
+    std::unique_ptr<solver::CfrPlusSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
 
     ASSERT_NE(solver, nullptr) << "Solver setup failed for scenario: " << scenario_file;
     ASSERT_NE(current_scenario_, nullptr) << "Current scenario is null after solver setup for: " << scenario_file;
@@ -245,9 +245,9 @@ TEST_F(PCfrSolverIntegrationTest, SimpleRiverTest) {
 
     std::vector<std::vector<double>> initial_reach_probs(solver->GetNumPlayers());
     for (size_t p = 0; p < solver->GetNumPlayers(); ++p) {
-        initial_reach_probs[p] = solver->GetPrivateCardsManager()->GetInitialReachProbs(p);
+        initial_reach_probs[p] = solver->GetPrivateHandManager()->GetInitialReachProbs(p);
     }
-    solver::BestResponseCalculator br_calculator(solver->GetGameTree(), solver->GetPrivateCardsManager(), solver->GetRiverRangeManager(), solver->GetInitialBoardMask());
+    solver::BestResponseCalculator br_calculator(solver->GetGameTree(), solver->GetPrivateHandManager(), solver->GetRiverRangeManager(), solver->GetInitialBoardMask());
     double initial_pot = current_scenario_->game_rule.GetInitialPot();
     double exploitability = br_calculator.ComputeExploitability(initial_reach_probs, initial_pot);
     std::cout << "SimpleRiverTest Exploitability (pot=" << initial_pot << "): " << std::scientific << std::setprecision(8) << exploitability << "%" << std::endl;
@@ -257,9 +257,9 @@ TEST_F(PCfrSolverIntegrationTest, SimpleRiverTest) {
     EXPECT_LT(exploitability, 0.05) << "Exploitability should be < 0.05% on river tree";
 }
 
-TEST_F(PCfrSolverIntegrationTest, SimplePreflopTest) {
+TEST_F(CfrPlusSolverIntegrationTest, SimplePreflopTest) {
     std::string scenario_file = "test_data/simple_preflop_scenario.json";
-    std::unique_ptr<solver::PCfrSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
+    std::unique_ptr<solver::CfrPlusSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
 
     ASSERT_NE(solver, nullptr) << "Solver setup failed for scenario: " << scenario_file;
     ASSERT_NE(current_scenario_, nullptr) << "Current scenario is null after solver setup for: " << scenario_file;
@@ -277,13 +277,14 @@ TEST_F(PCfrSolverIntegrationTest, SimplePreflopTest) {
     std::cout << "SimplePreflopTest completed successfully. (CFR and DumpStrategy skipped for speed)." << std::endl;
 }
 
-TEST_F(PCfrSolverIntegrationTest, SimpleFlopTest) {
+TEST_F(CfrPlusSolverIntegrationTest, SimpleFlopTest) {
     std::string scenario_file = "test_data/simple_flop_scenario.json";
-    std::unique_ptr<solver::PCfrSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
+    std::unique_ptr<solver::CfrPlusSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
 
     ASSERT_NE(solver, nullptr) << "Solver setup failed for scenario: " << scenario_file;
     ASSERT_NE(current_scenario_, nullptr) << "Current scenario is null after solver setup for: " << scenario_file;
 
+    current_scenario_->solver_config.iteration_limit = 200;
     ASSERT_NO_THROW(solver->Train());
 
     json actual_output_json;
@@ -311,7 +312,8 @@ TEST_F(PCfrSolverIntegrationTest, SimpleFlopTest) {
             json expected_json;
             ASSERT_NO_THROW(expected_file >> expected_json) << "Failed to parse expected JSON file: " << expected_file_path;
         } else {
-            std::cout << "Failed to open output file: " << full_output_path << std::endl;
+            std::cout << "Golden file " << expected_file_path << " not found or empty. Manual inspection required for "
+                      << current_scenario_->test_case_name << std::endl;
         }
     } else {
         std::cout << "No golden file specified for " << current_scenario_->test_case_name << ". Manual inspection required." << std::endl;
@@ -320,9 +322,9 @@ TEST_F(PCfrSolverIntegrationTest, SimpleFlopTest) {
     // --- Exploitability computation ---
     std::vector<std::vector<double>> initial_reach_probs(solver->GetNumPlayers());
     for (size_t p = 0; p < solver->GetNumPlayers(); ++p) {
-        initial_reach_probs[p] = solver->GetPrivateCardsManager()->GetInitialReachProbs(p);
+        initial_reach_probs[p] = solver->GetPrivateHandManager()->GetInitialReachProbs(p);
     }
-    solver::BestResponseCalculator br_calculator(solver->GetGameTree(), solver->GetPrivateCardsManager(), solver->GetRiverRangeManager(), solver->GetInitialBoardMask());
+    solver::BestResponseCalculator br_calculator(solver->GetGameTree(), solver->GetPrivateHandManager(), solver->GetRiverRangeManager(), solver->GetInitialBoardMask());
     double initial_pot = current_scenario_->game_rule.GetInitialPot();
     double exploitability = br_calculator.ComputeExploitability(initial_reach_probs, initial_pot);
     std::cout << "SimpleFlopTest Exploitability (pot=" << initial_pot << "): " << std::fixed << std::setprecision(4) << exploitability << "%" << std::endl;
@@ -332,9 +334,9 @@ TEST_F(PCfrSolverIntegrationTest, SimpleFlopTest) {
     EXPECT_LT(exploitability, 1.0) << "Exploitability should be < 1.0% on a small flop tree";
 }
 
-TEST_F(PCfrSolverIntegrationTest, TexasSolverGuiScenarioTest) {
-    std::string scenario_file = "test_data/texas_solver_gui_scenario.json";
-    std::unique_ptr<solver::PCfrSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
+TEST_F(CfrPlusSolverIntegrationTest, GuiFlopScenarioTest) {
+    std::string scenario_file = "test_data/gui_flop_scenario.json";
+    std::unique_ptr<solver::CfrPlusSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
 
     ASSERT_NE(solver, nullptr) << "Solver setup failed for scenario: " << scenario_file;
     ASSERT_NE(current_scenario_, nullptr) << "Current scenario is null after solver setup for: " << scenario_file;
@@ -342,7 +344,7 @@ TEST_F(PCfrSolverIntegrationTest, TexasSolverGuiScenarioTest) {
     current_scenario_->solver_config.iteration_limit = 0; // Skip CFR loop to make test instant
     ASSERT_NO_THROW(solver->Train());
 
-    // We skip dumping the strategy for TexasSolverGuiScenarioTest as the tree is too large
+    // We skip dumping the strategy for GuiFlopScenarioTest as the tree is too large
     
     std::cout << "Successfully generated strategy for " << current_scenario_->test_case_name << " (JSON dumping skipped)." << std::endl;
 
@@ -350,19 +352,19 @@ TEST_F(PCfrSolverIntegrationTest, TexasSolverGuiScenarioTest) {
 
     // We skip exploitability computation for integration tests as exact BR
     // on a full 100bb tree takes too long for a quick unit test execution.
-    // solver::BestResponseCalculator br_calculator(solver->GetGameTree(), solver->GetPrivateCardsManager(), solver->GetRiverRangeManager(), solver->GetInitialBoardMask());
+    // solver::BestResponseCalculator br_calculator(solver->GetGameTree(), solver->GetPrivateHandManager(), solver->GetRiverRangeManager(), solver->GetInitialBoardMask());
     // double exploitability = br_calculator.ComputeExploitability(initial_reach_probs);
     // std::cout << "NLHE Exploitability: " << exploitability << std::endl;
 }
 
-TEST_F(PCfrSolverIntegrationTest, CustomGuiScenarioTest) {
+TEST_F(CfrPlusSolverIntegrationTest, CustomGuiScenarioTest) {
     std::string scenario_file = "test_data/custom_gui_scenario.json";
-    std::unique_ptr<solver::PCfrSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
+    std::unique_ptr<solver::CfrPlusSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
 
     ASSERT_NE(solver, nullptr) << "Solver setup failed for scenario: " << scenario_file;
     ASSERT_NE(current_scenario_, nullptr) << "Current scenario is null after solver setup for: " << scenario_file;
 
-    // Use the 1000 iterations specified in the json
+    // Use the 200 iterations specified in the json
     ASSERT_NO_THROW(solver->Train());
     
     json actual_output_json;
@@ -371,34 +373,37 @@ TEST_F(PCfrSolverIntegrationTest, CustomGuiScenarioTest) {
     std::string output_filename = "CustomGuiScenarioTest_actual_output.json";
     std::ofstream out_file(output_filename);
     if (out_file.is_open()) {
-        out_file << actual_output_json.dump(2);
+        out_file << actual_output_json.dump();
         out_file.close();
         std::cout << "Actual output saved to: " << output_filename << std::endl;
     }
 
     std::vector<std::vector<double>> initial_reach_probs(solver->GetNumPlayers());
     for (size_t p = 0; p < solver->GetNumPlayers(); ++p) {
-        initial_reach_probs[p] = solver->GetPrivateCardsManager()->GetInitialReachProbs(p);
+        initial_reach_probs[p] = solver->GetPrivateHandManager()->GetInitialReachProbs(p);
     }
-    solver::BestResponseCalculator br_calculator(solver->GetGameTree(), solver->GetPrivateCardsManager(), solver->GetRiverRangeManager(), solver->GetInitialBoardMask());
+    solver::BestResponseCalculator br_calculator(solver->GetGameTree(), solver->GetPrivateHandManager(), solver->GetRiverRangeManager(), solver->GetInitialBoardMask());
     double initial_pot = current_scenario_->game_rule.GetInitialPot();
     double exploitability = br_calculator.ComputeExploitability(initial_reach_probs, initial_pot);
     std::cout << "CustomGuiScenarioTest Exploitability (pot=" << initial_pot << "): " << std::fixed << std::setprecision(4) << exploitability << "%" << std::endl;
-    EXPECT_LT(exploitability, 5.0) << "Exploitability should be < 5% after 1000 iterations";
+    EXPECT_LT(exploitability, 5.0) << "Exploitability should be < 5.0% after 200 iterations";
 }
 
-TEST_F(PCfrSolverIntegrationTest, GenerateGuiOutput) {
+TEST_F(CfrPlusSolverIntegrationTest, GenerateGuiOutput) {
     std::string scenario_file = "test_data/custom_gui_scenario.json";
-    std::unique_ptr<solver::PCfrSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
+    std::unique_ptr<solver::CfrPlusSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
     ASSERT_NE(solver, nullptr);
     ASSERT_NE(current_scenario_, nullptr);
 
-    current_scenario_->solver_config.iteration_limit = 20;
-    auto quick_solver = std::make_unique<solver::PCfrSolver>(
-        solver->GetGameTree(), solver->GetPrivateCardsManager(), solver->GetRiverRangeManager(),
+    current_scenario_->solver_config.iteration_limit = 200;
+    current_scenario_->solver_config.exploitability_interval = 20;
+    auto quick_solver = std::make_unique<solver::CfrPlusSolver>(
+        solver->GetGameTree(), solver->GetPrivateHandManager(), solver->GetRiverRangeManager(),
         current_scenario_->game_rule, current_scenario_->solver_config
     );
     ASSERT_NO_THROW(quick_solver->Train());
+    auto evs = quick_solver->ComputeEV();
+    std::cout << "20 iters EV P0: " << evs[0] << ", P1: " << evs[1] << ", Sum: " << evs[0] + evs[1] << std::endl;
 
     auto t0 = std::chrono::high_resolution_clock::now();
     json actual_output_json = quick_solver->DumpStrategy(true, -1, 3);
@@ -414,9 +419,87 @@ TEST_F(PCfrSolverIntegrationTest, GenerateGuiOutput) {
     }
 }
 
-TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
+TEST_F(CfrPlusSolverIntegrationTest, CustomGuiZeroSumTest) {
+    std::string scenario_file = "test_data/custom_gui_scenario.json";
+    
+    // Test 1: Full custom scenario
+    {
+        auto solver = LoadAndSetupSolverForScenario(scenario_file);
+        auto evs = solver->ComputeEV();
+        std::cout << "[BISECT 1: Full Custom] EV P0: " << evs[0] << ", P1: " << evs[1] << ", Sum: " << evs[0] + evs[1] << std::endl;
+    }
+
+    // Test 2: AA vs AA
+    {
+        std::ifstream ifs(scenario_file);
+        json j;
+        ifs >> j;
+        j["player_ranges"]["ip"] = "AA";
+        j["player_ranges"]["oop"] = "AA";
+        core::Deck deck;
+        TestScenario scenario(j, deck);
+        uint64_t initial_board_mask = core::Card::CardIntsToUint64(scenario.initial_board_ints_for_phm);
+        auto game_tree = std::make_shared<tree::GameTree>(scenario.game_rule);
+        std::vector<std::vector<core::PrivateHand>> initial_ranges = {scenario.range_ip, scenario.range_oop};
+        auto phm = std::make_shared<ranges::PrivateHandManager>(initial_ranges, initial_board_mask);
+        auto rrm = std::make_shared<ranges::RiverRangeManager>(evaluator_);
+        solver::CfrPlusSolver solver(game_tree, phm, rrm, scenario.game_rule, scenario.solver_config);
+        auto evs = solver.ComputeEV();
+        std::cout << "[BISECT 2: AA vs AA] EV P0: " << evs[0] << ", P1: " << evs[1] << ", Sum: " << evs[0] + evs[1] << std::endl;
+
+        // Checkdown only test
+        j["game_rule"]["building_settings"]["flop_ip"]["bet_sizes_percent"] = json::array();
+        j["game_rule"]["building_settings"]["flop_oop"]["bet_sizes_percent"] = json::array();
+        j["game_rule"]["building_settings"]["flop_ip"]["allow_all_in"] = false;
+        j["game_rule"]["building_settings"]["flop_oop"]["allow_all_in"] = false;
+        j["game_rule"]["building_settings"]["turn_ip"]["bet_sizes_percent"] = json::array();
+        j["game_rule"]["building_settings"]["turn_oop"]["bet_sizes_percent"] = json::array();
+        j["game_rule"]["building_settings"]["turn_ip"]["donk_sizes_percent"] = json::array();
+        j["game_rule"]["building_settings"]["turn_oop"]["donk_sizes_percent"] = json::array();
+        j["game_rule"]["building_settings"]["turn_ip"]["allow_all_in"] = false;
+        j["game_rule"]["building_settings"]["turn_oop"]["allow_all_in"] = false;
+        j["game_rule"]["building_settings"]["river_ip"]["bet_sizes_percent"] = json::array();
+        j["game_rule"]["building_settings"]["river_oop"]["bet_sizes_percent"] = json::array();
+        j["game_rule"]["building_settings"]["river_ip"]["donk_sizes_percent"] = json::array();
+        j["game_rule"]["building_settings"]["river_oop"]["donk_sizes_percent"] = json::array();
+        j["game_rule"]["building_settings"]["river_ip"]["allow_all_in"] = false;
+        j["game_rule"]["building_settings"]["river_oop"]["allow_all_in"] = false;
+        TestScenario check_sc(j, deck);
+        auto check_tree = std::make_shared<tree::GameTree>(check_sc.game_rule);
+        std::vector<std::vector<core::PrivateHand>> check_ranges = {check_sc.range_ip, check_sc.range_oop};
+        auto check_phm = std::make_shared<ranges::PrivateHandManager>(check_ranges, initial_board_mask);
+        auto check_rrm = std::make_shared<ranges::RiverRangeManager>(evaluator_);
+        solver::CfrPlusSolver check_solver(check_tree, check_phm, check_rrm, check_sc.game_rule, check_sc.solver_config);
+        auto check_evs = check_solver.ComputeEV();
+        std::cout << "[BISECT 2b: AA vs AA Checkdown Only] EV P0: " << check_evs[0] << ", P1: " << check_evs[1] << ", Sum: " << check_evs[0] + check_evs[1] << std::endl;
+    }
+
+    // Test 3: Simple Flop Scenario with Custom Ranges
+    {
+        std::ifstream ifs("test_data/simple_flop_scenario.json");
+        json j_simple;
+        ifs >> j_simple;
+        std::ifstream ifs_custom(scenario_file);
+        json j_custom;
+        ifs_custom >> j_custom;
+        j_simple["player_ranges"] = j_custom["player_ranges"];
+        j_simple["game_rule"]["initial_board"] = j_custom["game_rule"]["initial_board"];
+        core::Deck deck;
+        TestScenario scenario(j_simple, deck);
+        uint64_t initial_board_mask = core::Card::CardIntsToUint64(scenario.initial_board_ints_for_phm);
+        auto game_tree = std::make_shared<tree::GameTree>(scenario.game_rule);
+        std::vector<std::vector<core::PrivateHand>> initial_ranges = {scenario.range_ip, scenario.range_oop};
+        auto phm = std::make_shared<ranges::PrivateHandManager>(initial_ranges, initial_board_mask);
+        auto rrm = std::make_shared<ranges::RiverRangeManager>(evaluator_);
+        solver::CfrPlusSolver solver(game_tree, phm, rrm, scenario.game_rule, scenario.solver_config);
+        auto evs = solver.ComputeEV();
+        std::cout << "[BISECT 3: Custom Ranges + Simple Tree] EV P0: " << evs[0] << ", P1: " << evs[1] << ", Sum: " << evs[0] + evs[1] << std::endl;
+    }
+}
+
+TEST_F(CfrPlusSolverIntegrationTest, InjectedVulnerabilityStressTest) {
     std::string scenario_file = "test_data/simple_river_scenario.json";
-    std::unique_ptr<solver::PCfrSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
+    std::unique_ptr<solver::CfrPlusSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
     ASSERT_NE(solver, nullptr);
     ASSERT_NE(current_scenario_, nullptr);
 
@@ -425,13 +508,12 @@ TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
 
     std::vector<std::vector<double>> initial_reach_probs(solver->GetNumPlayers());
     for (size_t p = 0; p < solver->GetNumPlayers(); ++p) {
-        initial_reach_probs[p] = solver->GetPrivateCardsManager()->GetInitialReachProbs(p);
+        initial_reach_probs[p] = solver->GetPrivateHandManager()->GetInitialReachProbs(p);
     }
     double initial_pot = current_scenario_->game_rule.GetInitialPot();
     uint64_t initial_board_mask = solver->GetInitialBoardMask();
-    uint64_t canonical_board_mask = poker_solver::utils::FlopIsomorphism::GetCanonicalBoard(initial_board_mask);
 
-    solver::BestResponseCalculator br_calc(solver->GetGameTree(), solver->GetPrivateCardsManager(), solver->GetRiverRangeManager(), initial_board_mask);
+    solver::BestResponseCalculator br_calc(solver->GetGameTree(), solver->GetPrivateHandManager(), solver->GetRiverRangeManager(), initial_board_mask);
     
     // Baseline exploitability
     auto baseline = br_calc.ComputeExploitabilityDetailed(initial_reach_probs, initial_pot);
@@ -445,7 +527,7 @@ TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
     EXPECT_LT(baseline.exploitability_percent, 0.05);
 
     auto game_tree = solver->GetGameTree();
-    auto pcm = solver->GetPrivateCardsManager();
+    auto phm = solver->GetPrivateHandManager();
 
     // Inspect root node (Node 0, OOP player 1)
     core::NodeRef root = game_tree->GetRoot();
@@ -453,8 +535,8 @@ TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
     uint32_t root_idx = root.index;
     auto root_edges = game_tree->GetActionEdges(root_idx);
 
-    size_t oop_num_hands = pcm->GetPlayerRange(1).size();
-    auto root_trainable = game_tree->GetTrainable(root_idx, canonical_board_mask, root_edges.size(), oop_num_hands);
+    size_t oop_num_hands = phm->GetPlayerRange(1).size();
+    auto root_trainable = game_tree->GetTrainable(root_idx, initial_board_mask, root_edges.size(), oop_num_hands);
     const auto& root_strat = root_trainable->GetAverageStrategy();
     std::cout << "Root node (OOP) action count: " << root_edges.size() << ", hands: " << oop_num_hands << std::endl;
     for (size_t e = 0; e < root_edges.size(); ++e) {
@@ -482,7 +564,7 @@ TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
 
     auto ip_edges = game_tree->GetActionEdges(facing_bet_idx);
     size_t ip_num_actions = ip_edges.size();
-    size_t ip_num_hands = pcm->GetPlayerRange(0).size();
+    size_t ip_num_hands = phm->GetPlayerRange(0).size();
 
     // Find Fold action index and Call action index for Player 0
     int fold_action_idx = -1;
@@ -495,7 +577,7 @@ TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
     ASSERT_GE(call_action_idx, 0) << "Facing bet node must have a CALL action";
 
     // Save the original converged trainable for Player 0 at this node
-    auto original_trainable = game_tree->GetTrainable(facing_bet_idx, canonical_board_mask, ip_num_actions, ip_num_hands);
+    auto original_trainable = game_tree->GetTrainable(facing_bet_idx, initial_board_mask, ip_num_actions, ip_num_hands);
     const auto& orig_strat = original_trainable->GetAverageStrategy();
     std::cout << "Facing bet node (IP) action count: " << ip_num_actions << ", hands: " << ip_num_hands << std::endl;
     for (size_t a = 0; a < ip_num_actions; ++a) {
@@ -517,7 +599,7 @@ TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
         always_call_strat[h * ip_num_actions + call_action_idx] = 1.0;
     }
     auto call_trainable = std::make_shared<FixedStrategyTrainable>(ip_num_actions, ip_num_hands, always_call_strat);
-    game_tree->SetTrainable(facing_bet_idx, canonical_board_mask, call_trainable);
+    game_tree->SetTrainable(facing_bet_idx, initial_board_mask, call_trainable);
 
     auto vuln1 = br_calc.ComputeExploitabilityDetailed(initial_reach_probs, initial_pot);
     std::cout << "\n========================================================" << std::endl;
@@ -534,7 +616,7 @@ TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
     EXPECT_GT(vuln1.exploitability_percent, 20.0);
 
     // Restore IP facing bet before next test
-    game_tree->SetTrainable(facing_bet_idx, canonical_board_mask, original_trainable);
+    game_tree->SetTrainable(facing_bet_idx, initial_board_mask, original_trainable);
 
     // -------------------------------------------------------------
     // VULNERABILITY TEST 2: INJECT OOP BLUNDER (Player 1 Folds 100% facing IP Bet after Check)
@@ -573,8 +655,8 @@ TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
     }
     ASSERT_GE(oop_fold_idx, 0) << "OOP facing IP bet must have a FOLD action";
 
-    size_t oop_hands = pcm->GetPlayerRange(1).size();
-    auto original_oop_trainable = game_tree->GetTrainable(oop_facing_idx, canonical_board_mask, oop_edges.size(), oop_hands);
+    size_t oop_hands = phm->GetPlayerRange(1).size();
+    auto original_oop_trainable = game_tree->GetTrainable(oop_facing_idx, initial_board_mask, oop_edges.size(), oop_hands);
     
     // Force OOP to fold 100% of the time (surrendering made pairs to any bluff)
     std::vector<double> oop_fold_strat(oop_hands * oop_edges.size(), 0.0);
@@ -582,7 +664,7 @@ TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
         oop_fold_strat[h * oop_edges.size() + oop_fold_idx] = 1.0;
     }
     auto oop_fold_trainable = std::make_shared<FixedStrategyTrainable>(oop_edges.size(), oop_hands, oop_fold_strat);
-    game_tree->SetTrainable(oop_facing_idx, canonical_board_mask, oop_fold_trainable);
+    game_tree->SetTrainable(oop_facing_idx, initial_board_mask, oop_fold_trainable);
 
     auto vuln2 = br_calc.ComputeExploitabilityDetailed(initial_reach_probs, initial_pot);
     std::cout << "\n========================================================" << std::endl;
@@ -597,7 +679,7 @@ TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
     EXPECT_GT(vuln2.exploitability_percent, 40.0);
 
     // Restore OOP facing bet
-    game_tree->SetTrainable(oop_facing_idx, canonical_board_mask, original_oop_trainable);
+    game_tree->SetTrainable(oop_facing_idx, initial_board_mask, original_oop_trainable);
 
     // -------------------------------------------------------------
     // VULNERABILITY TEST 3: INJECT IP BLUNDER (IP Always Bets 100% after OOP Check)
@@ -605,14 +687,14 @@ TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
     // When OOP checks, IP holds Ace-high against OOP's made pairs.
     // If IP is injected with a flaw forcing 100% naked bluffs with Ace-high,
     // OOP's best response will call with all pairs, harvesting an extra bet every time!
-    auto original_ip_check_trainable = game_tree->GetTrainable(after_check_node.index, canonical_board_mask, ip_check_edges.size(), ip_num_hands);
+    auto original_ip_check_trainable = game_tree->GetTrainable(after_check_node.index, initial_board_mask, ip_check_edges.size(), ip_num_hands);
 
     std::vector<double> always_bet_after_check_strat(ip_num_hands * ip_check_edges.size(), 0.0);
     for (size_t h = 0; h < ip_num_hands; ++h) {
         always_bet_after_check_strat[h * ip_check_edges.size() + ip_bet_edge] = 1.0;
     }
     auto ip_bet_trainable = std::make_shared<FixedStrategyTrainable>(ip_check_edges.size(), ip_num_hands, always_bet_after_check_strat);
-    game_tree->SetTrainable(after_check_node.index, canonical_board_mask, ip_bet_trainable);
+    game_tree->SetTrainable(after_check_node.index, initial_board_mask, ip_bet_trainable);
 
     auto vuln3 = br_calc.ComputeExploitabilityDetailed(initial_reach_probs, initial_pot);
     std::cout << "\n========================================================" << std::endl;
@@ -626,13 +708,13 @@ TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
     EXPECT_GT(vuln3.exploitability_percent, 10.0);
 
     // Restore after_check_node
-    game_tree->SetTrainable(after_check_node.index, canonical_board_mask, original_ip_check_trainable);
+    game_tree->SetTrainable(after_check_node.index, initial_board_mask, original_ip_check_trainable);
 
     // -------------------------------------------------------------
     // RESTORATION / REVERSIBILITY TEST
     // -------------------------------------------------------------
     // Restore Player 0's original trainable
-    game_tree->SetTrainable(facing_bet_idx, canonical_board_mask, original_trainable);
+    game_tree->SetTrainable(facing_bet_idx, initial_board_mask, original_trainable);
     auto restored = br_calc.ComputeExploitabilityDetailed(initial_reach_probs, initial_pot);
     std::cout << "\n========================================================" << std::endl;
     std::cout << "RESTORED (Original Equilibrium Strategy Restored):" << std::endl;
@@ -644,4 +726,67 @@ TEST_F(PCfrSolverIntegrationTest, InjectedVulnerabilityStressTest) {
     EXPECT_NEAR(restored.exploitability_percent, baseline.exploitability_percent, 1e-6);
     EXPECT_NEAR(restored.player_br_evs[0], baseline.player_br_evs[0], 1e-6);
     EXPECT_NEAR(restored.player_br_evs[1], baseline.player_br_evs[1], 1e-6);
+}
+
+TEST_F(CfrPlusSolverIntegrationTest, CfrPlusMathematicalConvergenceTest) {
+    std::string scenario_file = "test_data/simple_river_scenario.json";
+    std::unique_ptr<solver::CfrPlusSolver> solver = LoadAndSetupSolverForScenario(scenario_file);
+    ASSERT_NE(solver, nullptr);
+    ASSERT_NE(current_scenario_, nullptr);
+
+    double initial_pot = current_scenario_->game_rule.GetInitialPot();
+    uint64_t initial_board_mask = solver->GetInitialBoardMask();
+
+    std::vector<std::vector<double>> initial_reach_probs(solver->GetNumPlayers());
+    for (size_t p = 0; p < solver->GetNumPlayers(); ++p) {
+        initial_reach_probs[p] = solver->GetPrivateHandManager()->GetInitialReachProbs(p);
+    }
+    solver::BestResponseCalculator br_calc(solver->GetGameTree(), solver->GetPrivateHandManager(), solver->GetRiverRangeManager(), initial_board_mask);
+
+    std::vector<int> checkpoints = {10, 50, 100, 250, 500, 1000};
+    double prev_exploitability = 1e9;
+
+    std::cout << "\n========================================================" << std::endl;
+    std::cout << "CFR+ CONVERGENCE & ZERO-SUM INVARIANCE VERIFICATION:" << std::endl;
+    std::cout << "========================================================" << std::endl;
+
+    for (int iters : checkpoints) {
+        current_scenario_ = std::make_unique<TestScenario>(load_test_scenario(scenario_file, deck_));
+        ASSERT_NE(current_scenario_, nullptr);
+        current_scenario_->solver_config.iteration_limit = iters;
+        auto game_tree = std::make_shared<tree::GameTree>(current_scenario_->game_rule);
+        auto phm = std::make_shared<ranges::PrivateHandManager>(
+            std::vector<std::vector<core::PrivateHand>>{current_scenario_->range_ip, current_scenario_->range_oop},
+            initial_board_mask
+        );
+        auto rrm = std::make_shared<ranges::RiverRangeManager>(evaluator_);
+        auto step_solver = std::make_unique<solver::CfrPlusSolver>(
+            game_tree, phm, rrm, current_scenario_->game_rule, current_scenario_->solver_config
+        );
+        ASSERT_NO_THROW(step_solver->Train());
+
+        // Zero-sum EV conservation check
+        auto evs = step_solver->ComputeEV();
+        double ev_sum = evs[0] + evs[1];
+        EXPECT_NEAR(ev_sum, 0.0, 1e-6) << "Zero-sum EV violation at iteration " << iters;
+
+        // Best response exploitability check
+        solver::BestResponseCalculator br_calc(step_solver->GetGameTree(), step_solver->GetPrivateHandManager(), step_solver->GetRiverRangeManager(), initial_board_mask);
+        double exp_pct = br_calc.ComputeExploitability(initial_reach_probs, initial_pot);
+
+        std::cout << " Iteration " << std::setw(4) << iters 
+                  << " | P0 EV: " << std::setw(12) << std::setprecision(6) << evs[0]
+                  << " | P1 EV: " << std::setw(12) << std::setprecision(6) << evs[1]
+                  << " | EV Sum: " << std::scientific << std::setprecision(2) << ev_sum
+                  << " | Exploitability: " << std::fixed << std::setprecision(6) << exp_pct << "%"
+                  << std::endl;
+
+        EXPECT_GT(exp_pct, 0.0);
+        EXPECT_LE(exp_pct, prev_exploitability + 0.01) << "Exploitability did not decrease over iterations";
+        prev_exploitability = exp_pct;
+    }
+
+    // Final exploitability must be near machine-epsilon Nash equilibrium (< 0.001%)
+    EXPECT_LT(prev_exploitability, 0.001);
+    std::cout << "========================================================\n" << std::endl;
 }

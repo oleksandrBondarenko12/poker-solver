@@ -11,7 +11,7 @@ class SolverWorker : public QObject {
     Q_OBJECT
 
 public:
-    explicit SolverWorker(std::shared_ptr<poker_solver::solver::PCfrSolver> solver, QObject *parent = nullptr)
+    explicit SolverWorker(std::shared_ptr<poker_solver::solver::CfrPlusSolver> solver, QObject *parent = nullptr)
         : QObject(parent), solver_(solver) {}
 
 public slots:
@@ -38,7 +38,7 @@ signals:
     void error(const QString& err);
 
 private:
-    std::shared_ptr<poker_solver::solver::PCfrSolver> solver_;
+    std::shared_ptr<poker_solver::solver::CfrPlusSolver> solver_;
 };
 
 #endif // SOLVERWORKER_H

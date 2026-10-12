@@ -10,7 +10,7 @@
 #include <unordered_set> // To check for duplicate generated hands
 #include <charconv>      // For std::from_chars (C++17) - REMOVED FOR DOUBLE
 #include <system_error>  // For std::errc - REMOVED
-#include <functional>    // For std::hash<PrivateCards>
+#include <functional>    // For std::hash<PrivateHand>
 #include <cstdlib>       // For std::strtod (alternative to stod)
 #include <cerrno>        // For errno with strtod
 #include <cctype>        // For std::tolower
@@ -26,11 +26,11 @@ namespace ranges { // Assuming this namespace
 
 // --- Static Public Method ---
 
-std::vector<core::PrivateCards> PrivateRangeConverter::string_to_private_cards(
+std::vector<core::PrivateHand> PrivateRangeConverter::string_to_private_hands(
     std::string_view range_string,
     const std::vector<int>& initial_board_ints) {
 
-    std::vector<core::PrivateCards> result_cards;
+    std::vector<core::PrivateHand> result_cards;
     uint64_t initial_board_mask = 0;
     try {
         initial_board_mask = core::Card::CardIntsToUint64(initial_board_ints);
@@ -43,7 +43,7 @@ std::vector<core::PrivateCards> PrivateRangeConverter::string_to_private_cards(
     std::vector<std::string> components = utils::StringSplit(range_string, ',');
 
     // Keep track of generated hands to detect duplicates from input string
-    std::unordered_set<core::PrivateCards, std::hash<core::PrivateCards>> generated_hands;
+    std::unordered_set<core::PrivateHand, std::hash<core::PrivateHand>> generated_hands;
 
     for (const std::string& component_str : components) {
         // Trim whitespace (optional but good practice)
@@ -91,7 +91,7 @@ std::vector<core::PrivateCards> PrivateRangeConverter::string_to_private_cards(
 void PrivateRangeConverter::parse_range_component(
     std::string_view component,
     uint64_t initial_board_mask,
-    std::vector<core::PrivateCards>& output_cards) {
+    std::vector<core::PrivateHand>& output_cards) {
 
     double weight = 1.0;
     std::string_view hand_notation = component;
@@ -176,7 +176,7 @@ void PrivateRangeConverter::generate_pair_combos(
     char rank_char,
     double weight,
     uint64_t initial_board_mask,
-    std::vector<core::PrivateCards>& output_cards) {
+    std::vector<core::PrivateHand>& output_cards) {
 
     int rank_index = core::Card::RankCharToIndex(rank_char);
     if (rank_index == -1) {
@@ -216,7 +216,7 @@ void PrivateRangeConverter::generate_suited_combos(
     char rank2_char,
     double weight,
     uint64_t initial_board_mask,
-    std::vector<core::PrivateCards>& output_cards) {
+    std::vector<core::PrivateHand>& output_cards) {
 
      int rank1_index = core::Card::RankCharToIndex(rank1_char);
      int rank2_index = core::Card::RankCharToIndex(rank2_char);
@@ -255,7 +255,7 @@ void PrivateRangeConverter::generate_offsuit_combos(
     char rank2_char,
     double weight,
     uint64_t initial_board_mask,
-    std::vector<core::PrivateCards>& output_cards) {
+    std::vector<core::PrivateHand>& output_cards) {
 
     int rank1_index = core::Card::RankCharToIndex(rank1_char);
     int rank2_index = core::Card::RankCharToIndex(rank2_char);
@@ -297,7 +297,7 @@ void PrivateRangeConverter::generate_specific_combo(
     std::string_view combo_str, // e.g., "AcKc"
     double weight,
     uint64_t initial_board_mask,
-    std::vector<core::PrivateCards>& output_cards) {
+    std::vector<core::PrivateHand>& output_cards) {
 
     if (combo_str.length() != 4) {
         throw std::invalid_argument("Invalid specific combo length: " + std::string(combo_str));

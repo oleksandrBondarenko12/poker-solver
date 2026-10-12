@@ -3,7 +3,7 @@
 
 #include <QDialog>
 #include <QStyledItemDelegate>
-#include "poker_solver/json.hpp"
+#include <nlohmann/json.hpp>
 #include <vector>
 #include <string>
 
@@ -62,9 +62,9 @@ private slots:
 
 private:
     void setupUI();
-    void buildGameTreeUI(const nlohmann::json& node, QTreeWidgetItem* parent_item, const std::string& current_path = "", const QString& action_label = "");
+    void buildGameTreeUI(const nlohmann::json& node, QTreeWidgetItem* parent_item, const std::string& current_path = "", const QString& action_label = "", int actor_player = -1);
     void populateImmediateChildren(QTreeWidgetItem* parent_item, const nlohmann::json& node, const std::string& current_path);
-    void updateHeader(const nlohmann::json& node);
+    void updateHeader(const nlohmann::json& node, const QString& last_action = "", int last_actor = -1);
     void updateStrategyGrid(const nlohmann::json& strategy_node);
     void clearLayout(QLayout* layout);
 

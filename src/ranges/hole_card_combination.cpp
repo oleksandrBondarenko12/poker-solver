@@ -19,18 +19,18 @@ inline void hash_combine(std::size_t& seed, const T& v) {
 
 // --- Constructors ---
 
-PrivateCards::PrivateCards()
+PrivateHand::PrivateHand()
     : card1_int_(-1), // Indicate invalid state
       card2_int_(-1),
       weight_(0.0),
       board_mask_(0) {}
 
-PrivateCards::PrivateCards(int card1_int, int card2_int, double weight) {
+PrivateHand::PrivateHand(int card1_int, int card2_int, double weight) {
     initialize(card1_int, card2_int, weight);
 }
 
 // Private helper for initialization logic shared by constructors.
-void PrivateCards::initialize(int c1, int c2, double w) {
+void PrivateHand::initialize(int c1, int c2, double w) {
     // Validate individual cards
     if (!Card::IsValidCardInt(c1)) {
         std::ostringstream oss;
@@ -61,10 +61,10 @@ void PrivateCards::initialize(int c1, int c2, double w) {
 
 // --- Accessors ---
 
-std::string PrivateCards::to_string() const {
+std::string PrivateHand::to_string() const {
     // Check for the default-constructed invalid state
     if (card1_int_ < 0 || card2_int_ < 0) {
-        return "InvalidPrivateCards";
+        return "InvalidPrivateHand";
     }
     // Convert ints back to strings for representation
     // Note: This might not capture suitedness directly unless inferred.
@@ -75,16 +75,16 @@ std::string PrivateCards::to_string() const {
 
 // --- Operators ---
 
-bool PrivateCards::operator==(const PrivateCards& other) const {
+bool PrivateHand::operator==(const PrivateHand& other) const {
     // Equality depends only on the cards, not the weight.
     return card1_int_ == other.card1_int_ && card2_int_ == other.card2_int_;
 }
 
-bool PrivateCards::operator!=(const PrivateCards& other) const {
+bool PrivateHand::operator!=(const PrivateHand& other) const {
     return !(*this == other);
 }
 
-bool PrivateCards::operator<(const PrivateCards& other) const {
+bool PrivateHand::operator<(const PrivateHand& other) const {
     // Order primarily by the first card, then by the second.
     if (card1_int_ != other.card1_int_) {
         return card1_int_ < other.card1_int_;

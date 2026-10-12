@@ -24,43 +24,43 @@ constexpr size_t kMaxHands = 1326;
 constexpr size_t kMaxActions = 10;
 } // namespace
 
-PCfrSolver::PCfrSolver(std::shared_ptr<tree::GameTree> game_tree,
-                       std::shared_ptr<ranges::PrivateCardsManager> pcm,
+CfrPlusSolver::CfrPlusSolver(std::shared_ptr<tree::GameTree> game_tree,
+                       std::shared_ptr<ranges::PrivateHandManager> phm,
                        std::shared_ptr<ranges::RiverRangeManager> rrm,
                        const config::Rule &rule, Config solver_config)
-    : Solver(std::move(game_tree)), pcm_(std::move(pcm)), rrm_(std::move(rrm)),
+    : Solver(std::move(game_tree)), phm_(std::move(phm)), rrm_(std::move(rrm)),
       deck_(rule.GetDeck()), config_(std::move(solver_config)),
       initial_board_mask_(
           core::Card::CardIntsToUint64(rule.GetInitialBoardCardsInt())),
       initial_pot_(rule.GetInitialPot()) {}
 
-void PCfrSolver::preallocate_trainables(core::NodeRef node) {
+void CfrPlusSolver::preallocate_trainables(core::NodeRef node) {
   // Deprecated, allocating dynamically on the fly
 }
 
-void PCfrSolver::exchange_color(double *utility, size_t num_hands, int player,
-                               int rank1, int rank2) const {
-  if (rank1 == rank2)
+void CfrPlusSolver::exchange_suit(double *utility, size_t num_hands, int player,
+                              int suit1, int suit2) const {
+  if (suit1 == suit2)
     return;
   int self_ind[kMaxHands];
   int privateint2ind[52 * 52];
   std::fill_n(self_ind, num_hands, -1);
   std::fill_n(privateint2ind, 52 * 52, -1);
-  const auto &range = pcm_->GetPlayerRange(player);
+  const auto &range = phm_->GetPlayerRange(player);
   for (size_t i = 0; i < num_hands; ++i) {
     int card1 = range[i].Card1Int();
     int card2 = range[i].Card2Int();
     if (card1 > card2)
       std::swap(card1, card2);
     self_ind[i] = card1 * 52 + card2;
-    if (card1 % 4 == rank1)
-      card1 = card1 - rank1 + rank2;
-    else if (card1 % 4 == rank2)
-      card1 = card1 - rank2 + rank1;
-    if (card2 % 4 == rank1)
-      card2 = card2 - rank1 + rank2;
-    else if (card2 % 4 == rank2)
-      card2 = card2 - rank2 + rank1;
+    if (card1 % 4 == suit1)
+      card1 = card1 - suit1 + suit2;
+    else if (card1 % 4 == suit2)
+      card1 = card1 - suit2 + suit1;
+    if (card2 % 4 == suit1)
+      card2 = card2 - suit1 + suit2;
+    else if (card2 % 4 == suit2)
+      card2 = card2 - suit2 + suit1;
     if (card1 > card2)
       std::swap(card1, card2);
     privateint2ind[card1 * 52 + card2] = static_cast<int>(i);
@@ -79,7 +79,7 @@ void PCfrSolver::exchange_color(double *utility, size_t num_hands, int player,
   }
 }
 
-void PCfrSolver::train() {
+void CfrPlusSolver::train() {
   stop_signal_ = false;
   evs_calculated_ = false;
   completed_iterations_ = 0;
@@ -90,7 +90,7 @@ void PCfrSolver::train() {
 
   std::vector<std::vector<double>> initial_reach_probs(num_players_);
   for (size_t p = 0; p < num_players_; ++p) {
-    initial_reach_probs[p] = pcm_->GetInitialReachProbs(p);
+    initial_reach_probs[p] = phm_->GetInitialReachProbs(p);
   }
 
   preallocate_trainables(game_tree_->GetRoot());
@@ -112,7 +112,7 @@ void PCfrSolver::train() {
 
     if ((config_.target_exploitability > 0.0 || config_.exploitability_callback) &&
         (i % config_.exploitability_interval == 0 || i == config_.iteration_limit)) {
-      BestResponseCalculator br_calc(game_tree_, pcm_, rrm_, initial_board_mask_);
+      BestResponseCalculator br_calc(game_tree_, phm_, rrm_, initial_board_mask_);
       double current_exp = br_calc.compute_exploitability(initial_reach_probs, initial_pot_);
       last_exploitability_ = current_exp;
       std::cout << "[Iteration " << i << "] Exploitability: " << std::fixed << std::setprecision(4)
@@ -130,10 +130,10 @@ void PCfrSolver::train() {
   }
 }
 
-std::vector<double> PCfrSolver::compute_ev() {
+std::vector<double> CfrPlusSolver::compute_ev() {
   std::vector<std::vector<double>> initial_reach_probs(num_players_);
   for (size_t p = 0; p < num_players_; ++p)
-    initial_reach_probs[p] = pcm_->GetInitialReachProbs(p);
+    initial_reach_probs[p] = phm_->GetInitialReachProbs(p);
 
   std::vector<double> results(num_players_, 0.0);
   for (int traverser = 0; traverser < static_cast<int>(num_players_);
@@ -144,7 +144,7 @@ std::vector<double> PCfrSolver::compute_ev() {
                 initial_board_mask_, true, true, evs);
 
     double unnormalized_ev = 0.0;
-    for (size_t i = 0; i < pcm_->GetPlayerRange(traverser).size(); ++i) {
+    for (size_t i = 0; i < phm_->GetPlayerRange(traverser).size(); ++i) {
       unnormalized_ev += initial_reach_probs[traverser][i] * evs[i];
     }
     results[traverser] = unnormalized_ev;
@@ -153,20 +153,20 @@ std::vector<double> PCfrSolver::compute_ev() {
   return results;
 }
 
-double PCfrSolver::compute_exploitability() const {
+double CfrPlusSolver::compute_exploitability() const {
   std::vector<std::vector<double>> initial_reach_probs(num_players_);
   for (size_t p = 0; p < num_players_; ++p) {
-    initial_reach_probs[p] = pcm_->GetInitialReachProbs(p);
+    initial_reach_probs[p] = phm_->GetInitialReachProbs(p);
   }
-  BestResponseCalculator br_calc(game_tree_, pcm_, rrm_, initial_board_mask_);
+  BestResponseCalculator br_calc(game_tree_, phm_, rrm_, initial_board_mask_);
   return br_calc.compute_exploitability(initial_reach_probs, initial_pot_);
 }
 
-void PCfrSolver::stop() { stop_signal_ = true; }
+void CfrPlusSolver::stop() { stop_signal_ = true; }
 
-json PCfrSolver::dump_strategy(bool dump_evs, int max_depth, int max_chance_outcomes) const {
+json CfrPlusSolver::dump_strategy(bool dump_evs, int max_depth, int max_chance_outcomes) const {
   if (dump_evs && !evs_calculated_) {
-    const_cast<PCfrSolver *>(this)->compute_ev();
+    const_cast<CfrPlusSolver *>(this)->compute_ev();
   }
   // The root JSON is the root tree node itself
   json result =
@@ -183,7 +183,7 @@ json PCfrSolver::dump_strategy(bool dump_evs, int max_depth, int max_chance_outc
   json ranges_array = json::array();
   for (size_t p = 0; p < num_players_; ++p) {
     json range_json = json::array();
-    for (const auto &combo : pcm_->GetPlayerRange(p)) {
+    for (const auto &combo : phm_->GetPlayerRange(p)) {
       range_json.push_back(combo.ToString());
     }
     ranges_array.push_back(range_json);
@@ -193,7 +193,7 @@ json PCfrSolver::dump_strategy(bool dump_evs, int max_depth, int max_chance_outc
   return result;
 }
 
-json PCfrSolver::dump_strategy_recursive(core::NodeRef node, bool dump_evs,
+json CfrPlusSolver::dump_strategy_recursive(core::NodeRef node, bool dump_evs,
                                          int current_depth,
                                          int max_depth,
                                          uint64_t current_board_mask,
@@ -216,12 +216,9 @@ json PCfrSolver::dump_strategy_recursive(core::NodeRef node, bool dump_evs,
     }
     result["board"] = current_board;
 
-    uint64_t canonical_board =
-        utils::FlopIsomorphism::GetCanonicalBoard(current_board_mask);
-
     auto edges = game_tree_->GetActionEdges(node.index);
     size_t num_actions = edges.size();
-    size_t acting_player_num_hands = pcm_->GetPlayerRange(player).size();
+    size_t acting_player_num_hands = phm_->GetPlayerRange(player).size();
 
     json actions_array = json::array();
     for (const auto &edge : edges) {
@@ -230,7 +227,7 @@ json PCfrSolver::dump_strategy_recursive(core::NodeRef node, bool dump_evs,
     result["actions"] = actions_array;
 
     auto trainable = game_tree_->GetTrainable(
-        node.index, canonical_board, num_actions, acting_player_num_hands);
+        node.index, current_board_mask, num_actions, acting_player_num_hands);
     if (trainable) {
       result["strategy"] = trainable->DumpStrategy(dump_evs);
     }
@@ -292,7 +289,7 @@ json PCfrSolver::dump_strategy_recursive(core::NodeRef node, bool dump_evs,
             }
           }
           std::array<int, 4> current_iso_offset =
-              utils::FlopIsomorphism::GetColorIsoOffset(current_board_mask);
+              utils::FlopIsomorphism::GetSuitIsoOffset(current_board_mask);
 
           // Group available canonical cards by rank (12 down to 0: Ace down to 2)
           std::vector<std::vector<int>> canonical_cards_by_rank(13);
@@ -371,7 +368,7 @@ json PCfrSolver::dump_strategy_recursive(core::NodeRef node, bool dump_evs,
   return result;
 }
 
-void PCfrSolver::cfr_utility(core::NodeRef node, const double *reach_probs_0,
+void CfrPlusSolver::cfr_utility(core::NodeRef node, const double *reach_probs_0,
                              const double *reach_probs_1, int traverser,
                              int iteration, uint64_t current_board_mask,
                              bool is_top_chance, bool use_average_strategy,
@@ -400,7 +397,7 @@ void PCfrSolver::cfr_utility(core::NodeRef node, const double *reach_probs_0,
   }
 }
 
-void PCfrSolver::cfr_action_node(uint32_t node_idx, const double *reach_probs_0,
+void CfrPlusSolver::cfr_action_node(uint32_t node_idx, const double *reach_probs_0,
                                  const double *reach_probs_1, int traverser,
                                  int iteration, uint64_t current_board_mask,
                                  bool is_top_chance, bool use_average_strategy,
@@ -410,17 +407,15 @@ void PCfrSolver::cfr_action_node(uint32_t node_idx, const double *reach_probs_0,
   auto edges = game_tree_->GetActionEdges(node_idx);
   size_t num_actions = edges.size();
 
-  size_t traverser_num_hands = pcm_->GetPlayerRange(traverser).size();
+  size_t traverser_num_hands = phm_->GetPlayerRange(traverser).size();
   std::fill_n(out_utility, traverser_num_hands, 0.0);
 
-  size_t acting_player_num_hands = pcm_->GetPlayerRange(acting_player).size();
+  size_t acting_player_num_hands = phm_->GetPlayerRange(acting_player).size();
   if (num_actions == 0 || acting_player_num_hands == 0)
     return;
 
-  uint64_t canonical_board_mask =
-      utils::FlopIsomorphism::GetCanonicalBoard(current_board_mask);
   auto trainable = game_tree_->GetTrainable(
-      node_idx, canonical_board_mask, num_actions, acting_player_num_hands);
+      node_idx, current_board_mask, num_actions, acting_player_num_hands);
   const std::vector<double> &current_strategy_local =
       use_average_strategy ? trainable->GetAverageStrategy()
                            : trainable->GetCurrentStrategy();
@@ -434,8 +429,8 @@ void PCfrSolver::cfr_action_node(uint32_t node_idx, const double *reach_probs_0,
   for (size_t a = 0; a < num_actions; ++a) {
     double next_reach_0[kMaxHands];
     double next_reach_1[kMaxHands];
-    size_t hands_0 = pcm_->GetPlayerRange(0).size();
-    size_t hands_1 = pcm_->GetPlayerRange(1).size();
+    size_t hands_0 = phm_->GetPlayerRange(0).size();
+    size_t hands_1 = phm_->GetPlayerRange(1).size();
 
     std::copy(reach_probs_0, reach_probs_0 + hands_0, next_reach_0);
     std::copy(reach_probs_1, reach_probs_1 + hands_1, next_reach_1);
@@ -481,12 +476,11 @@ void PCfrSolver::cfr_action_node(uint32_t node_idx, const double *reach_probs_0,
         }
       }
 
-      trainable->UpdateRegrets(weighted_regrets, iteration);
       const double *actor_reach =
           (acting_player == 0) ? reach_probs_0 : reach_probs_1;
-      const std::vector<double> &new_strategy = trainable->GetCurrentStrategy();
-      trainable->AccumulateAverageStrategy(new_strategy, actor_reach,
+      trainable->AccumulateAverageStrategy(current_strategy_local, actor_reach,
                                            iteration);
+      trainable->UpdateRegrets(weighted_regrets, iteration);
     } else {
       std::vector<double> evs(num_actions * acting_player_num_hands);
       for (size_t h = 0; h < acting_player_num_hands; ++h) {
@@ -499,7 +493,7 @@ void PCfrSolver::cfr_action_node(uint32_t node_idx, const double *reach_probs_0,
   }
 }
 
-void PCfrSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs_0,
+void CfrPlusSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs_0,
                                  const double *reach_probs_1, int traverser,
                                  int iteration, uint64_t current_board_mask,
                                  bool is_top_chance, bool use_average_strategy,
@@ -510,11 +504,38 @@ void PCfrSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs_0,
   int num_cards_to_deal =
       (round_after_chance == core::GameRound::kFlop) ? 3 : 1;
 
-  size_t traverser_num_hands = pcm_->GetPlayerRange(traverser).size();
+  size_t traverser_num_hands = phm_->GetPlayerRange(traverser).size();
   std::fill_n(out_utility, traverser_num_hands, 0.0);
 
   if (num_cards_to_deal == 3) {
     const auto &canonical_flops = utils::FlopIsomorphism::GetCanonicalFlops();
+    const auto &flop_perm_counts =
+        utils::FlopIsomorphism::GetCanonicalFlopPermCounts();
+
+    const auto &traverser_range = phm_->GetPlayerRange(traverser);
+    int card_pair_to_index[52 * 52];
+    std::fill_n(card_pair_to_index, 52 * 52, -1);
+    for (size_t h = 0; h < traverser_num_hands; ++h) {
+      int c1 = traverser_range[h].Card1Int();
+      int c2 = traverser_range[h].Card2Int();
+      if (c1 > c2)
+        std::swap(c1, c2);
+      card_pair_to_index[c1 * 52 + c2] = static_cast<int>(h);
+    }
+
+    int mapped_hands[24][kMaxHands];
+    for (int p = 0; p < 24; ++p) {
+      const auto &perm = utils::FlopIsomorphism::get_permutation_by_index(p);
+      for (size_t h = 0; h < traverser_num_hands; ++h) {
+        int c1 = traverser_range[h].Card1Int();
+        int c2 = traverser_range[h].Card2Int();
+        int mc1 = (c1 / 4) * 4 + perm[c1 % 4];
+        int mc2 = (c2 / 4) * 4 + perm[c2 % 4];
+        if (mc1 > mc2)
+          std::swap(mc1, mc2);
+        mapped_hands[p][h] = card_pair_to_index[mc1 * 52 + mc2];
+      }
+    }
 
 #pragma omp parallel if (is_top_chance)
     {
@@ -523,17 +544,16 @@ void PCfrSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs_0,
 #pragma omp for schedule(dynamic) nowait
       for (size_t i = 0; i < canonical_flops.size(); ++i) {
         uint64_t outcome_board_mask = canonical_flops[i].first;
-        double weight = canonical_flops[i].second;
         uint64_t next_board_mask = current_board_mask | outcome_board_mask;
 
         double next_reach_0[kMaxHands];
         double next_reach_1[kMaxHands];
-        size_t hands_0 = pcm_->GetPlayerRange(0).size();
-        size_t hands_1 = pcm_->GetPlayerRange(1).size();
+        size_t hands_0 = phm_->GetPlayerRange(0).size();
+        size_t hands_1 = phm_->GetPlayerRange(1).size();
 
         bool can_reach = false;
         for (size_t p = 0; p < num_players_; ++p) {
-          const auto &range = pcm_->GetPlayerRange(p);
+          const auto &range = phm_->GetPlayerRange(p);
           const double *current_reach =
               (p == 0) ? reach_probs_0 : reach_probs_1;
           double *next_reach = (p == 0) ? next_reach_0 : next_reach_1;
@@ -544,9 +564,7 @@ void PCfrSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs_0,
                                             outcome_board_mask)) {
               next_reach[h] = 0.0;
             } else {
-              // Flop deals exactly 22100 combinations. The canonical branch
-              // represents `weight` of them. But CFR reach probability requires
-              // dividing by the total possible deals (22100).
+              // Normalized by total number of flops (22,100)
               next_reach[h] = current_reach[h] / 22100.0;
             }
             current_reach_sum += next_reach[h];
@@ -561,7 +579,17 @@ void PCfrSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs_0,
                       next_board_mask, false, use_average_strategy, child_ev);
 
           for (size_t h = 0; h < traverser_num_hands; ++h) {
-            thread_utility[h] += child_ev[h] * weight;
+            double h_utility = 0.0;
+            for (int p = 0; p < 24; ++p) {
+              int count = flop_perm_counts[i][p];
+              if (count == 0)
+                continue;
+              int mh = mapped_hands[p][h];
+              if (mh >= 0) {
+                h_utility += child_ev[mh] * count;
+              }
+            }
+            thread_utility[h] += h_utility;
           }
         }
       }
@@ -592,8 +620,10 @@ void PCfrSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs_0,
     if (outcomes.empty())
       return;
 
+    static bool no_turn_iso = (std::getenv("NO_TURN_ISO") != nullptr);
     std::array<int, 4> current_iso_offset =
-        utils::FlopIsomorphism::GetColorIsoOffset(current_board_mask);
+        no_turn_iso ? std::array<int, 4>{0, 0, 0, 0}
+                    : utils::FlopIsomorphism::GetSuitIsoOffset(current_board_mask);
 
     std::vector<int> valid_cards;
     valid_cards.reserve(outcomes.size());
@@ -607,7 +637,9 @@ void PCfrSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs_0,
 
     std::vector<std::vector<double>> results(
         52, std::vector<double>(traverser_num_hands, 0.0));
-    double possible_deals = outcomes.size();
+    double possible_deals = (outcomes.size() > 4)
+                                ? static_cast<double>(outcomes.size() - 4)
+                                : 1.0;
 
 #pragma omp parallel if (is_top_chance)
     {
@@ -620,14 +652,14 @@ void PCfrSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs_0,
 
         double next_reach_0[kMaxHands];
         double next_reach_1[kMaxHands];
-        size_t hands_0 = pcm_->GetPlayerRange(0).size();
-        size_t hands_1 = pcm_->GetPlayerRange(1).size();
+        size_t hands_0 = phm_->GetPlayerRange(0).size();
+        size_t hands_1 = phm_->GetPlayerRange(1).size();
         std::copy(reach_probs_0, reach_probs_0 + hands_0, next_reach_0);
         std::copy(reach_probs_1, reach_probs_1 + hands_1, next_reach_1);
 
         bool can_reach = false;
         for (size_t p = 0; p < num_players_; ++p) {
-          const auto &range = pcm_->GetPlayerRange(p);
+          const auto &range = phm_->GetPlayerRange(p);
           double *next_reach = (p == 0) ? next_reach_0 : next_reach_1;
           double current_reach_sum = 0.0;
           for (size_t h = 0; h < range.size(); ++h) {
@@ -661,7 +693,7 @@ void PCfrSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs_0,
         int canonical_card = card_int + offset;
 
         std::vector<double> mapped_utility = results[canonical_card];
-        exchange_color(mapped_utility.data(), traverser_num_hands, traverser,
+        exchange_suit(mapped_utility.data(), traverser_num_hands, traverser,
                       canonical_suit, suit);
 
         for (size_t u = 0; u < traverser_num_hands; ++u) {
@@ -676,17 +708,16 @@ void PCfrSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs_0,
   }
 }
 
-void PCfrSolver::cfr_showdown_node(uint32_t node_idx,
+void CfrPlusSolver::cfr_showdown_node(uint32_t node_idx,
                                    const double *reach_probs_0,
                                    const double *reach_probs_1, int traverser,
                                    uint64_t final_board_mask,
                                    double *out_utility) {
 
   int opponent_player = 1 - traverser;
-  const auto &traverser_range = pcm_->GetPlayerRange(traverser);
-  const auto &opponent_range = pcm_->GetPlayerRange(opponent_player);
+  const auto &traverser_range = phm_->GetPlayerRange(traverser);
+  const auto &opponent_range = phm_->GetPlayerRange(opponent_player);
   size_t traverser_hands = traverser_range.size();
-  size_t opponent_hands = opponent_range.size();
 
   std::fill_n(out_utility, traverser_hands, 0.0);
 
@@ -696,102 +727,54 @@ void PCfrSolver::cfr_showdown_node(uint32_t node_idx,
       rrm_->GetRiverCombos(opponent_player, opponent_range, final_board_mask);
 
   auto payoffs = game_tree_->GetShowdownPayoffs(node_idx);
-
-  double total_oppo_mass = 0.0;
-  double oppo_mass_by_card[52] = {0.0};
+  double win_payoff = payoffs[opponent_player];
+  double lose_payoff = -payoffs[traverser];
 
   const double *oppo_reach =
       (opponent_player == 0) ? reach_probs_0 : reach_probs_1;
 
-  for (size_t oppo_orig_idx = 0; oppo_orig_idx < opponent_hands;
-       ++oppo_orig_idx) {
-    double mass = oppo_reach[oppo_orig_idx];
-    total_oppo_mass += mass;
+  double winsum = 0.0;
+  double card_winsum[52] = {0.0};
+  size_t j = 0;
 
-    int c1 = opponent_range[oppo_orig_idx].Card1Int();
-    int c2 = opponent_range[oppo_orig_idx].Card2Int();
-    oppo_mass_by_card[c1] += mass;
-    oppo_mass_by_card[c2] += mass;
+  for (size_t i = 0; i < traverser_combos.size(); ++i) {
+    const auto &trav_comb = traverser_combos[i];
+    while (j < opponent_combos.size() && trav_comb.rank < opponent_combos[j].rank) {
+      const auto &oppo_comb = opponent_combos[j];
+      double prob = oppo_reach[oppo_comb.original_range_index];
+      winsum += prob;
+      card_winsum[oppo_comb.private_hand.Card1Int()] += prob;
+      card_winsum[oppo_comb.private_hand.Card2Int()] += prob;
+      ++j;
+    }
+    int t1 = trav_comb.private_hand.Card1Int();
+    int t2 = trav_comb.private_hand.Card2Int();
+    double actual_win_mass = winsum - card_winsum[t1] - card_winsum[t2];
+    out_utility[trav_comb.original_range_index] += actual_win_mass * win_payoff;
   }
 
-  double win_mass = 0.0;
-  double win_mass_by_card[52] = {0.0};
+  double losssum = 0.0;
+  double card_losssum[52] = {0.0};
+  int j_signed = static_cast<int>(opponent_combos.size()) - 1;
 
-  size_t oppo_idx = 0;
-  size_t tie_start_idx = 0;
-  size_t tie_end_idx = 0;
-  double tie_mass = 0.0;
-  double tie_mass_by_card[52] = {0.0};
-
-  for (size_t trav_idx = 0; trav_idx < traverser_combos.size(); ++trav_idx) {
-    const auto &trav_c = traverser_combos[trav_idx];
-    size_t trav_orig_idx = trav_c.original_range_index;
-
-    while (oppo_idx < opponent_combos.size() &&
-           opponent_combos[oppo_idx].rank > trav_c.rank) {
-      size_t o_orig = opponent_combos[oppo_idx].original_range_index;
-      double mass = oppo_reach[o_orig];
-      win_mass += mass;
-      int c1 = opponent_combos[oppo_idx].private_cards.Card1Int();
-      int c2 = opponent_combos[oppo_idx].private_cards.Card2Int();
-      win_mass_by_card[c1] += mass;
-      win_mass_by_card[c2] += mass;
-      oppo_idx++;
+  for (int i = static_cast<int>(traverser_combos.size()) - 1; i >= 0; --i) {
+    const auto &trav_comb = traverser_combos[i];
+    while (j_signed >= 0 && trav_comb.rank > opponent_combos[j_signed].rank) {
+      const auto &oppo_comb = opponent_combos[j_signed];
+      double prob = oppo_reach[oppo_comb.original_range_index];
+      losssum += prob;
+      card_losssum[oppo_comb.private_hand.Card1Int()] += prob;
+      card_losssum[oppo_comb.private_hand.Card2Int()] += prob;
+      --j_signed;
     }
-
-    if (tie_start_idx != oppo_idx) {
-      tie_start_idx = oppo_idx;
-      tie_end_idx = oppo_idx;
-      tie_mass = 0.0;
-      std::fill_n(tie_mass_by_card, 52, 0.0);
-
-      while (tie_end_idx < opponent_combos.size() &&
-             opponent_combos[tie_end_idx].rank == trav_c.rank) {
-        size_t o_orig = opponent_combos[tie_end_idx].original_range_index;
-        double mass = oppo_reach[o_orig];
-        tie_mass += mass;
-        int c1 = opponent_combos[tie_end_idx].private_cards.Card1Int();
-        int c2 = opponent_combos[tie_end_idx].private_cards.Card2Int();
-        tie_mass_by_card[c1] += mass;
-        tie_mass_by_card[c2] += mass;
-        tie_end_idx++;
-      }
-    }
-
-    double loss_mass = total_oppo_mass - win_mass - tie_mass;
-
-    int t1 = trav_c.private_cards.Card1Int();
-    int t2 = trav_c.private_cards.Card2Int();
-
-    double win_blockers = win_mass_by_card[t1] + win_mass_by_card[t2];
-    double tie_blockers = tie_mass_by_card[t1] + tie_mass_by_card[t2];
-    double total_blockers = oppo_mass_by_card[t1] + oppo_mass_by_card[t2];
-
-    auto oppo_idx_opt =
-        pcm_->GetOpponentHandIndex(traverser, opponent_player, trav_orig_idx);
-    double self_mass = 0.0;
-    if (oppo_idx_opt) {
-      self_mass = oppo_reach[*oppo_idx_opt];
-    }
-
-    tie_blockers -= self_mass;
-    total_blockers -= self_mass;
-
-    double loss_blockers = total_blockers - win_blockers - tie_blockers;
-
-    double actual_win_mass = win_mass - win_blockers;
-    double actual_tie_mass = tie_mass - tie_blockers;
-    double actual_loss_mass = loss_mass - loss_blockers;
-
-    double expected_value_for_hand = actual_win_mass * payoffs[1 - traverser] +
-                                     actual_tie_mass * 0.0 +
-                                     actual_loss_mass * (-payoffs[traverser]);
-
-    out_utility[trav_orig_idx] = expected_value_for_hand;
+    int t1 = trav_comb.private_hand.Card1Int();
+    int t2 = trav_comb.private_hand.Card2Int();
+    double actual_loss_mass = losssum - card_losssum[t1] - card_losssum[t2];
+    out_utility[trav_comb.original_range_index] += actual_loss_mass * lose_payoff;
   }
 }
 
-void PCfrSolver::cfr_terminal_node(uint32_t node_idx,
+void CfrPlusSolver::cfr_terminal_node(uint32_t node_idx,
                                    const double *reach_probs_0,
                                    const double *reach_probs_1, int traverser,
                                    uint64_t current_board_mask,
@@ -801,8 +784,8 @@ void PCfrSolver::cfr_terminal_node(uint32_t node_idx,
   double payoff_for_traverser = payoffs[traverser];
 
   int opponent_player = 1 - traverser;
-  const auto &traverser_range = pcm_->GetPlayerRange(traverser);
-  const auto &opponent_range = pcm_->GetPlayerRange(opponent_player);
+  const auto &traverser_range = phm_->GetPlayerRange(traverser);
+  const auto &opponent_range = phm_->GetPlayerRange(opponent_player);
   size_t traverser_hands = traverser_range.size();
   size_t opponent_hands = opponent_range.size();
 
@@ -834,7 +817,7 @@ void PCfrSolver::cfr_terminal_node(uint32_t node_idx,
     int t2 = traverser_range[h_i].Card2Int();
 
     auto oppo_idx_opt =
-        pcm_->GetOpponentHandIndex(traverser, opponent_player, h_i);
+        phm_->GetOpponentHandIndex(traverser, opponent_player, h_i);
     double self_mass = 0.0;
     if (oppo_idx_opt) {
       self_mass = oppo_reach[*oppo_idx_opt];

@@ -1,8 +1,7 @@
 #include "poker_solver/tree/poker_action_edge.h" // Adjust path if necessary
 
-
-#include <limits> // For std::numeric_limits (though not used currently)
-#include <sstream> // For std::ostringstream
+#include <limits>    // For std::numeric_limits (though not used currently)
+#include <sstream>   // For std::ostringstream
 #include <stdexcept> // For std::invalid_argument
 
 namespace poker_solver {
@@ -18,8 +17,8 @@ GameAction::GameAction()
 GameAction::GameAction(PokerAction action, double amount)
     : action_(action), amount_(amount) {
   // Validate amount based on action type
-  bool requires_amount = (action_ == PokerAction::kBet ||
-                          action_ == PokerAction::kRaise);
+  bool requires_amount =
+      (action_ == PokerAction::kBet || action_ == PokerAction::kRaise);
   bool has_amount = (amount != kNoAmount); // Check against sentinel
 
   if (requires_amount && !has_amount) {
@@ -43,25 +42,32 @@ GameAction::GameAction(PokerAction action, double amount)
 
   // Optional: Check if amount is non-negative for BET/RAISE
   if (requires_amount && amount < 0) {
-       std::ostringstream oss;
-       oss << "Amount for " << ActionToString(action_)
-           << " cannot be negative: " << amount;
-       throw std::invalid_argument(oss.str());
+    std::ostringstream oss;
+    oss << "Amount for " << ActionToString(action_)
+        << " cannot be negative: " << amount;
+    throw std::invalid_argument(oss.str());
   }
 }
 
 std::string GameAction::action_to_string(PokerAction act) {
   switch (act) {
-    case PokerAction::kBegin:      return "BEGIN";
-    case PokerAction::kRoundBegin: return "ROUND_BEGIN"; // Use underscore style
-    case PokerAction::kBet:        return "BET";
-    case PokerAction::kRaise:      return "RAISE";
-    case PokerAction::kCheck:      return "CHECK";
-    case PokerAction::kFold:       return "FOLD";
-    case PokerAction::kCall:       return "CALL";
-    default:
-      // Handle potential unknown enum values gracefully
-      return "UNKNOWN_ACTION";
+  case PokerAction::kBegin:
+    return "BEGIN";
+  case PokerAction::kRoundBegin:
+    return "ROUND_BEGIN"; // Use underscore style
+  case PokerAction::kBet:
+    return "BET";
+  case PokerAction::kRaise:
+    return "RAISE";
+  case PokerAction::kCheck:
+    return "CHECK";
+  case PokerAction::kFold:
+    return "FOLD";
+  case PokerAction::kCall:
+    return "CALL";
+  default:
+    // Handle potential unknown enum values gracefully
+    return "UNKNOWN_ACTION";
   }
 }
 

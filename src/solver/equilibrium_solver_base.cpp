@@ -25,7 +25,7 @@ namespace solver {
 // GetGameTree() is implemented inline in the header.
 
 // Pure virtual functions (Train, Stop, DumpStrategy) have no implementation here
-// as this is an abstract base class. Concrete solver implementations (like PCfrSolver)
+// as this is an abstract base class. Concrete solver implementations (like CfrPlusSolver)
 // will provide these.
 
 } // namespace solver

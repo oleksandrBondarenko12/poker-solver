@@ -16,14 +16,14 @@
 using namespace poker_solver::core;
 using namespace poker_solver::ranges;
 
-// Test fixture for PrivateCardsManager tests
-class PrivateCardsManagerTest : public ::testing::Test {
+// Test fixture for PrivateHandManager tests
+class PrivateHandManagerTest : public ::testing::Test {
  protected:
   // Sample ranges (very small for manual probability calculation)
   // P0: AA, KK, AKs
   // P1: QQ, AKo
-  std::vector<PrivateCards> range_p0_;
-  std::vector<PrivateCards> range_p1_;
+  std::vector<PrivateHand> range_p0_;
+  std::vector<PrivateHand> range_p1_;
 
   // Card integers for convenience
   int ac_, ad_, ah_, as_, kc_, kd_, kh_, ks_, qc_, qd_, qh_, qs_;
@@ -68,8 +68,8 @@ class PrivateCardsManagerTest : public ::testing::Test {
 
   // Helper to calculate opponent weight sum for a given hand and board
   double CalculateOpponentWeightSum(
-      const PrivateCards& player_hand,
-      const std::vector<PrivateCards>& oppo_range,
+      const PrivateHand& player_hand,
+      const std::vector<PrivateHand>& oppo_range,
       uint64_t board_mask) {
       uint64_t player_mask = player_hand.GetBoardMask();
       double opponent_weight_sum = 0.0;
@@ -103,56 +103,56 @@ class PrivateCardsManagerTest : public ::testing::Test {
 
 // --- Tests ---
 
-TEST(PrivateCardsManagerConstructorValidation, InvalidInputs) {
+TEST(PrivateHandManagerConstructorValidation, InvalidInputs) {
     // Empty ranges
-    EXPECT_THROW(PrivateCardsManager({}, 0), std::invalid_argument);
+    EXPECT_THROW(PrivateHandManager({}, 0), std::invalid_argument);
     // Mismatched player count (currently restricted to 2)
-    std::vector<PrivateCards> r1 = {PrivateCards(0,1)};
-    std::vector<PrivateCards> r2 = {PrivateCards(2,3)};
-    std::vector<PrivateCards> r3 = {PrivateCards(4,5)};
-    EXPECT_THROW(PrivateCardsManager({r1}, 0), std::invalid_argument); // 1 player
-    EXPECT_THROW(PrivateCardsManager({r1, r2, r3}, 0), std::invalid_argument); // 3 players
+    std::vector<PrivateHand> r1 = {PrivateHand(0,1)};
+    std::vector<PrivateHand> r2 = {PrivateHand(2,3)};
+    std::vector<PrivateHand> r3 = {PrivateHand(4,5)};
+    EXPECT_THROW(PrivateHandManager({r1}, 0), std::invalid_argument); // 1 player
+    EXPECT_THROW(PrivateHandManager({r1, r2, r3}, 0), std::invalid_argument); // 3 players
 }
 
-TEST_F(PrivateCardsManagerTest, Getters) {
-    std::vector<std::vector<PrivateCards>> ranges = {range_p0_, range_p1_};
-    PrivateCardsManager pcm(ranges, 0ULL); // Empty board
+TEST_F(PrivateHandManagerTest, Getters) {
+    std::vector<std::vector<PrivateHand>> ranges = {range_p0_, range_p1_};
+    PrivateHandManager phm(ranges, 0ULL); // Empty board
 
-    EXPECT_EQ(pcm.GetNumPlayers(), 2);
-    EXPECT_EQ(pcm.GetPlayerRange(0).size(), 16);
-    EXPECT_EQ(pcm.GetPlayerRange(1).size(), 18);
-    EXPECT_THROW(pcm.GetPlayerRange(2), std::out_of_range);
+    EXPECT_EQ(phm.GetNumPlayers(), 2);
+    EXPECT_EQ(phm.GetPlayerRange(0).size(), 16);
+    EXPECT_EQ(phm.GetPlayerRange(1).size(), 18);
+    EXPECT_THROW(phm.GetPlayerRange(2), std::out_of_range);
 }
 
-TEST_F(PrivateCardsManagerTest, GetOpponentHandIndex) {
-     std::vector<std::vector<PrivateCards>> ranges = {range_p0_, range_p1_};
-     PrivateCardsManager pcm(ranges, 0ULL); // Empty board
+TEST_F(PrivateHandManagerTest, GetOpponentHandIndex) {
+     std::vector<std::vector<PrivateHand>> ranges = {range_p0_, range_p1_};
+     PrivateHandManager phm(ranges, 0ULL); // Empty board
 
      // Find P1's index for AcKd (which is index 6 in range_p1_)
      // starting from P0's AcKc (index 12 in range_p0_) - should fail
-     EXPECT_FALSE(pcm.GetOpponentHandIndex(0, 1, 12).has_value());
+     EXPECT_FALSE(phm.GetOpponentHandIndex(0, 1, 12).has_value());
 
      // Find P1's index for AcKd (index 6) starting from P1's AcKd (index 6)
-     EXPECT_EQ(pcm.GetOpponentHandIndex(1, 1, 6).value(), 6);
+     EXPECT_EQ(phm.GetOpponentHandIndex(1, 1, 6).value(), 6);
 
      // Find P0's index for AcAd (index 0) starting from P1's AcKd (index 6) - should fail
-     EXPECT_FALSE(pcm.GetOpponentHandIndex(1, 0, 6).has_value());
+     EXPECT_FALSE(phm.GetOpponentHandIndex(1, 0, 6).has_value());
 
      // Find P1's index for QQ (e.g., QcQd, index 0) starting from P0's AA (index 0) - should fail
-     EXPECT_FALSE(pcm.GetOpponentHandIndex(0, 1, 0).has_value());
+     EXPECT_FALSE(phm.GetOpponentHandIndex(0, 1, 0).has_value());
 
      // Test invalid inputs
-     EXPECT_FALSE(pcm.GetOpponentHandIndex(0, 1, 99).has_value()); // Invalid hand index
-     EXPECT_FALSE(pcm.GetOpponentHandIndex(2, 1, 0).has_value()); // Invalid player index
-     EXPECT_FALSE(pcm.GetOpponentHandIndex(0, 2, 0).has_value()); // Invalid player index
+     EXPECT_FALSE(phm.GetOpponentHandIndex(0, 1, 99).has_value()); // Invalid hand index
+     EXPECT_FALSE(phm.GetOpponentHandIndex(2, 1, 0).has_value()); // Invalid player index
+     EXPECT_FALSE(phm.GetOpponentHandIndex(0, 2, 0).has_value()); // Invalid player index
 }
 
-TEST_F(PrivateCardsManagerTest, GetInitialReachProbsEmptyBoard) {
-    std::vector<std::vector<PrivateCards>> ranges = {range_p0_, range_p1_};
-    PrivateCardsManager pcm(ranges, 0ULL); // Empty board
+TEST_F(PrivateHandManagerTest, GetInitialReachProbsEmptyBoard) {
+    std::vector<std::vector<PrivateHand>> ranges = {range_p0_, range_p1_};
+    PrivateHandManager phm(ranges, 0ULL); // Empty board
 
-    const auto& probs_p0 = pcm.GetInitialReachProbs(0);
-    const auto& probs_p1 = pcm.GetInitialReachProbs(1);
+    const auto& probs_p0 = phm.GetInitialReachProbs(0);
+    const auto& probs_p1 = phm.GetInitialReachProbs(1);
 
     EXPECT_EQ(probs_p0.size(), range_p0_.size());
     EXPECT_EQ(probs_p1.size(), range_p1_.size());
@@ -175,15 +175,15 @@ TEST_F(PrivateCardsManagerTest, GetInitialReachProbsEmptyBoard) {
     EXPECT_NEAR(total_prob_p1, 1.0, 1e-9);
 }
 
-TEST_F(PrivateCardsManagerTest, GetInitialReachProbsWithBoard) {
+TEST_F(PrivateHandManagerTest, GetInitialReachProbsWithBoard) {
     // Board: Ac Qd 5h
     std::vector<int> board_ints = {ac_, qd_, h5_};
     uint64_t board_mask = Card::CardIntsToUint64(board_ints);
-    std::vector<std::vector<PrivateCards>> ranges = {range_p0_, range_p1_};
-    PrivateCardsManager pcm(ranges, board_mask);
+    std::vector<std::vector<PrivateHand>> ranges = {range_p0_, range_p1_};
+    PrivateHandManager phm(ranges, board_mask);
 
-    const auto& probs_p0 = pcm.GetInitialReachProbs(0);
-    const auto& probs_p1 = pcm.GetInitialReachProbs(1);
+    const auto& probs_p0 = phm.GetInitialReachProbs(0);
+    const auto& probs_p1 = phm.GetInitialReachProbs(1);
 
     EXPECT_EQ(probs_p0.size(), range_p0_.size());
     EXPECT_EQ(probs_p1.size(), range_p1_.size());
@@ -210,8 +210,8 @@ TEST_F(PrivateCardsManagerTest, GetInitialReachProbsWithBoard) {
     // 3. Check relative probabilities for two non-blocked hands for P0
     //    Hand A: KhKs (Index 11) vs Hand B: AhAs (Index 5)
     //    Board: Ac Qd 5h
-    PrivateCards handA = range_p0_[11]; // KhKs
-    PrivateCards handB = range_p0_[5];  // AhAs
+    PrivateHand handA = range_p0_[11]; // KhKs
+    PrivateHand handB = range_p0_[5];  // AhAs
     double weight_A = handA.Weight();
     double weight_B = handB.Weight();
 

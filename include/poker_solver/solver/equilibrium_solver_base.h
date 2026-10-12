@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 #include "poker_solver/tree/extensive_game_tree.h"
-#include "poker_solver/json.hpp"
+#include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 

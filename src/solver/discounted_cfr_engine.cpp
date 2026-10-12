@@ -2,14 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
-#include <iomanip>
-#include <iostream>
-#include "poker_solver/json.hpp"
 #include <limits>
-#include <numeric>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
-#include <typeinfo>
-#include <utility>
 #include <vector>
 
 using json = nlohmann::json;
@@ -45,7 +40,7 @@ DiscountedCfrTrainable::DiscountedCfrTrainable(size_t num_actions, size_t num_ha
   }
 }
 
-void DiscountedCfrTrainable::CalculateCurrentStrategy() {
+void DiscountedCfrTrainable::CalculateCurrentStrategy() const {
   if (current_strategy_valid_) return;
 
   if (num_actions_ == 0 || num_hands_ == 0) {
@@ -67,7 +62,7 @@ void DiscountedCfrTrainable::CalculateCurrentStrategy() {
 
     for (size_t a = 0; a < num_actions_; ++a) {
       size_t index = h * num_actions_ + a;
-      if (regret_sum > 1e-12) {
+      if (regret_sum > 0.0) {
         current_strategy_[index] = std::max(0.0, cumulative_regrets_[index]) / regret_sum;
       } else {
         current_strategy_[index] = default_prob;
@@ -99,7 +94,7 @@ void DiscountedCfrTrainable::CalculateAverageStrategy() const {
 
     for (size_t a = 0; a < num_actions_; ++a) {
       size_t index = h * num_actions_ + a;
-      if (strategy_sum_total > 1e-12) {
+      if (strategy_sum_total > 0.0) {
         average_strategy_[index] = cumulative_strategy_sum_[index] / strategy_sum_total;
       } else {
         average_strategy_[index] = default_prob;
@@ -111,7 +106,7 @@ void DiscountedCfrTrainable::CalculateAverageStrategy() const {
 
 const std::vector<double>& DiscountedCfrTrainable::GetCurrentStrategy() const {
   if (!current_strategy_valid_) {
-    const_cast<DiscountedCfrTrainable *>(this)->CalculateCurrentStrategy();
+    CalculateCurrentStrategy();
   }
   return current_strategy_;
 }
@@ -132,12 +127,29 @@ void DiscountedCfrTrainable::UpdateRegrets(const std::vector<double>& weighted_r
     throw std::invalid_argument("Iteration number must be positive in UpdateRegrets.");
   }
 
-  for (size_t i = 0; i < total_size; ++i) {
-    cumulative_regrets_[i] += weighted_regrets[i];
-    
-    // CFR+ negative regret clamping
-    if (cumulative_regrets_[i] < 0.0) {
-      cumulative_regrets_[i] = 0.0;
+  static bool use_dcfr = (std::getenv("USE_DCFR") != nullptr);
+  if (use_dcfr) {
+    double t = static_cast<double>(iteration);
+    double alpha_pow = std::pow(t, 1.5);
+    double alpha_coef = alpha_pow / (1.0 + alpha_pow);
+    double beta = 0.5;
+
+    for (size_t i = 0; i < total_size; ++i) {
+      cumulative_regrets_[i] += weighted_regrets[i];
+      if (cumulative_regrets_[i] > 0.0) {
+        cumulative_regrets_[i] *= alpha_coef;
+      } else {
+        cumulative_regrets_[i] *= beta;
+      }
+    }
+  } else {
+    for (size_t i = 0; i < total_size; ++i) {
+      cumulative_regrets_[i] += weighted_regrets[i];
+      
+      // CFR+ negative regret clamping
+      if (cumulative_regrets_[i] < 0.0) {
+        cumulative_regrets_[i] = 0.0;
+      }
     }
   }
 
@@ -147,14 +159,36 @@ void DiscountedCfrTrainable::UpdateRegrets(const std::vector<double>& weighted_r
 
 void DiscountedCfrTrainable::AccumulateAverageStrategy(
     const std::vector<double>& current_strategy, const double* reach_probs, int iteration) {
-  // Linear weighting for CFR+
-  double current_weight = static_cast<double>(iteration);
+  size_t total_size = num_actions_ * num_hands_;
+  if (current_strategy.size() != total_size) {
+    throw std::invalid_argument("Strategy vector size mismatch in AccumulateAverageStrategy.");
+  }
+  if (!reach_probs) {
+    throw std::invalid_argument("reach_probs is null in AccumulateAverageStrategy.");
+  }
+  if (iteration <= 0) {
+    throw std::invalid_argument("Iteration must be positive in AccumulateAverageStrategy.");
+  }
 
-  for (size_t h = 0; h < num_hands_; ++h) {
-    double reach_weight = reach_probs[h];
-    for (size_t a = 0; a < num_actions_; ++a) {
-      size_t i = h * num_actions_ + a;
-      cumulative_strategy_sum_[i] += reach_weight * current_weight * current_strategy[i];
+  static bool use_dcfr = (std::getenv("USE_DCFR") != nullptr);
+  if (use_dcfr) {
+    double t = static_cast<double>(iteration);
+    double theta = 0.9;
+    double strategy_coef = std::pow(t / (t + 1.0), 2.0);
+
+    for (size_t i = 0; i < total_size; ++i) {
+      cumulative_strategy_sum_[i] = cumulative_strategy_sum_[i] * theta + current_strategy[i] * strategy_coef;
+    }
+  } else {
+    // Linear weighting with actor reach probability for CFR+
+    double current_weight = static_cast<double>(iteration);
+    for (size_t h = 0; h < num_hands_; ++h) {
+      if (reach_probs[h] <= 0.0) continue;
+      double reach_weight = reach_probs[h];
+      for (size_t a = 0; a < num_actions_; ++a) {
+        size_t i = h * num_actions_ + a;
+        cumulative_strategy_sum_[i] += reach_weight * current_weight * current_strategy[i];
+      }
     }
   }
   average_strategy_valid_ = false;
@@ -164,6 +198,7 @@ void DiscountedCfrTrainable::SetEv(const std::vector<double>& evs) {
   size_t total_size = num_actions_ * num_hands_;
   if (evs.size() != total_size) throw std::invalid_argument("EV vector size mismatch in SetEv.");
   expected_values_ = evs;
+  has_evs_ = true;
 }
 
 json DiscountedCfrTrainable::DumpStrategy(bool with_ev) const {
@@ -173,7 +208,7 @@ json DiscountedCfrTrainable::DumpStrategy(bool with_ev) const {
   std::vector<std::vector<double>> strategy_out;
   std::vector<std::vector<double>> evs_out;
   
-  bool has_evs = with_ev && !expected_values_.empty();
+  bool has_evs = with_ev && has_evs_;
 
   for (size_t h = 0; h < num_hands_; ++h) {
     std::vector<double> hand_avg_strategy(num_actions_);
@@ -185,12 +220,11 @@ json DiscountedCfrTrainable::DumpStrategy(bool with_ev) const {
     strategy_out.push_back(hand_avg_strategy);
     
     if (has_evs) {
-      std::vector<double> hand_evs(num_actions_, 0.0);
+      std::vector<double> hand_evs(num_actions_, std::numeric_limits<double>::quiet_NaN());
       for (size_t a = 0; a < num_actions_; ++a) {
         size_t index = h * num_actions_ + a;
         if (index < expected_values_.size()) {
-          double val = expected_values_[index];
-          hand_evs[a] = std::isnan(val) ? 0.0 : val;
+          hand_evs[a] = expected_values_[index];
         }
       }
       evs_out.push_back(hand_evs);
@@ -233,6 +267,7 @@ void DiscountedCfrTrainable::CopyStateFrom(const Trainable& other) {
   this->current_strategy_valid_ = other_dcfr.current_strategy_valid_;
   this->average_strategy_valid_ = other_dcfr.average_strategy_valid_;
   this->expected_values_ = other_dcfr.expected_values_;
+  this->has_evs_ = other_dcfr.has_evs_;
 }
 
 }

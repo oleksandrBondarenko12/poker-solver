@@ -1,5 +1,5 @@
-#ifndef POKER_SOLVER_RANGES_RIVER_COMBS_H_
-#define POKER_SOLVER_RANGES_RIVER_COMBS_H_
+#ifndef POKER_SOLVER_RANGES_EVALUATED_RIVER_COMBO_H_
+#define POKER_SOLVER_RANGES_EVALUATED_RIVER_COMBO_H_
 
 #include "poker_solver/ranges/hole_card_combination.h" // For PrivateCards
 #include <cstddef> // For size_t
@@ -10,22 +10,22 @@ namespace ranges {
 // Represents an evaluated hand combination on the river.
 // Stores the original private cards, their evaluated rank on the river board,
 // and the index they held in the player's initial range.
-struct RiverCombs {
+struct EvaluatedRiverCombo {
   // Default constructor (creates an invalid state).
-  RiverCombs();
+  EvaluatedRiverCombo();
 
-  // Constructs a RiverCombs object.
+  // Constructs an EvaluatedRiverCombo object.
   // Args:
-  //   private_cards: The PrivateCards object representing the hole cards.
+  //   private_hand: The PrivateHand object representing the hole cards.
   //   rank: The evaluated rank of the 7-card hand (private + river board).
   //         Lower rank values are typically better.
   //   original_range_index: The index this hand occupied in the player's
   //                         initial range vector (before river filtering).
-  RiverCombs(const core::PrivateCards& private_cards, int rank,
-             size_t original_range_index);
+  EvaluatedRiverCombo(const core::PrivateHand& private_hand, int rank,
+                      size_t original_range_index);
 
   // The player's private hole cards for this specific combination.
-  core::PrivateCards private_cards;
+  core::PrivateHand private_hand;
 
   // The evaluated rank (strength) of the 7-card hand (private + river board).
   // Lower values indicate stronger hands. A value like kInvalidRank from the
@@ -35,13 +35,9 @@ struct RiverCombs {
   // The original index of this hand within the player's pre-river range vector.
   // Useful for mapping results back or calculating reach probabilities.
   size_t original_range_index = static_cast<size_t>(-1); // Initialize to invalid index
-
-  // Note: The original code also stored the board vector here. This is removed
-  // as RiverCombs objects are typically stored in a structure (like RiverRangeManager)
-  // that is already keyed by the specific river board, making storing it again redundant.
 };
 
 } // namespace ranges
 } // namespace poker_solver
 
-#endif // POKER_SOLVER_RANGES_RIVER_COMBS_H_
+#endif // POKER_SOLVER_RANGES_EVALUATED_RIVER_COMBO_H_

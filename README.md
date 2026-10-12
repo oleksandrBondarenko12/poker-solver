@@ -1,185 +1,182 @@
-# Poker Solver UI 🎲🃏
+# PokerSolver 🎲🃏
 
-## Overview ✨
-**Poker Solver UI** is a modern graphical application designed to visualize and interact with advanced poker strategy data. Built with Qt6 and styled with inspiration from Tailwind CSS, this tool presents an intuitive interface that dynamically adapts to your viewport. The project is configured with CMake, ensuring a smooth cross-platform build process.
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B20)
+[![CMake](https://img.shields.io/badge/CMake-3.10+-brightgreen.svg)](https://cmake.org/)
+[![Qt6](https://img.shields.io/badge/Qt-6.x-green.svg)](https://www.qt.io/)
+[![OpenMP](https://img.shields.io/badge/OpenMP-Enabled-orange.svg)](https://www.openmp.org/)
+[![Tests](https://img.shields.io/badge/Tests-89%20Passing-success.svg)](tests/)
+
+**PokerSolver** is a high-performance, mathematically rigorous C++20 Counterfactual Regret Minimization (CFR+) equilibrium solver and interactive desktop analysis suite for Heads-Up Texas Hold'em. 
+
+It pairs an optimized CFR+ solving engine—featuring 64-bit bitboard card algebra, canonical flop isomorphism reduction, and zero-sum EV invariance—with a modern Qt6 graphical user interface and GTO Strategy Explorer.
+
+---
 
 ## Current Design Status 🎨
-Below are the current design mockups of the main application components:
 
-### Main Window
+Below are screenshots of the interactive desktop application:
+
+### Main Solver Configuration Window
 ![Main Window Design](images/screenshots/main-window.png)
-*Current implementation of the main solver configuration window*
+*Configures initial board cards, pot size, effective stacks, and granular per-street betting geometry.*
 
-### Range Selector
+### Range Selection Matrix
 ![Range Selector Design](images/screenshots/range-selector.png)
-*Range selection dialog for configuring poker hand ranges*
+*Visual 13×13 matrix dialog for configuring IP and OOP preflop hand ranges with custom weights.*
 
-### Strategy Explorer
+### GTO Strategy Explorer
 ![Strategy Explorer Design](images/screenshots/strategy-explorer.png)
-*Strategy visualization window showing the dynamic hand matrix*
+*Real-time strategy inspection window featuring action mix bars, EV heatmaps, combo breakdowns, and blocker detection.*
 
-## Table of Contents 📚
-- [Overview](#overview-)
-- [Features](#features-)
-- [Project Structure](#project-structure-)
-- [Installation & Build](#installation--build-)
-- [Usage](#usage-)
-- [Dependencies](#dependencies-)
-- [Contributing](#contributing-)
-- [License](#license-)
-- [Future Improvements](#future-improvements-)
+---
 
-## Features 🌟
-- **Modern UI Design:**  
-  Enjoy a sleek, dark-themed interface influenced by Tailwind CSS trends.
-- **Dynamic Hand Matrix:**  
-  The Strategy Explorer features a responsive 13×13 hand matrix that adjusts gracefully to different screen sizes.
-- **Range Selector Dialog:**  
-  Easily select and modify card ranges with an intuitive dialog.
-- **Strategy Explorer:**  
-  Dive deep into poker strategies with interactive visualizations.
-- **Cross-Platform Build:**  
-  Use CMake to generate build files and compile across various platforms.
+## Key Features 🌟
+
+- **C++20 CFR+ Engine:** Implements Discounted CFR / CFR+ with regret matching+, linear strategy weighting, and reach-probability normalization.
+- **Strict Mathematical Invariants:** Guaranteed zero-sum EV conservation ($EV_{IP} + EV_{OOP} = 0$) and backward-induction exploitability calculation via the built-in [BestResponseCalculator](include/poker_solver/solver/exploitability_calculator.h).
+- **Canonical Flop Isomorphism:** Exploits suit isomorphism to collapse all 22,100 Hold'em flops into 1,755 canonical abstractions, drastically saving memory and computation.
+- **Fast 5-Card & 7-Card Hand Evaluation:** High-speed lookup table evaluator with binary caching (`five_card_strength.bin`) and bitwise board overlap checks.
+- **Extensive-Form Game Tree Builder:** Full street progression (Preflop $\rightarrow$ Flop $\rightarrow$ Turn $\rightarrow$ River) supporting customizable bet sizes, raises, and all-ins.
+- **Multi-Threaded Acceleration:** Parallelized across public chance dealing using OpenMP.
+- **Interactive Qt6 GUI & GTO Explorer:**
+  - Dynamic 13×13 hand grid with proportional action frequencies and EV heatmaps.
+  - Card blocker awareness (dead cards dynamically crossed out in combo views).
+  - Virtualized on-demand game tree hierarchy navigation.
+  - Asynchronous background solver execution with zero-copy JSON IPC.
+
+---
 
 ## Project Structure 📁
 
 ```
-PokerSolver/
-├── CMakeLists.txt          # CMake build configuration
-├── images
-│   └── screenshots         # Application screenshots and design references
-│       ├── main-window.png
-│       ├── range-selector.png
-│       └── strategy-explorer.png
-├── main.cpp                # Application entry point
-├── MainWindow.cpp          # Main Window implementation (UI integration)
-├── MainWindow.h            # Main Window declaration
-├── RangeSelector.cpp       # Dialog implementation for card range selection
-├── RangeSelector.h         # Dialog declaration for card range selection
-├── StrategyExplorer.cpp    # Implements the Strategy Explorer, including the dynamic hand matrix
-├── StrategyExplorer.h      # Declaration for Strategy Explorer
-├── resources.qrc           # Bundles external assets (stylesheets, images) for Qt
-├── styles
-│   └── dark.qss            # Dark theme stylesheet
-├── combined.html           # Design reference for combined layout
-├── main-window.html        # Design reference for the main window
-├── range-selector.html     # Design reference for range selector
-├── strategy-explorer.html  # Design reference for strategy explorer
-└── .vscode/
-    ├── c_cpp_properties.json   # VSCode C/C++ configuration
-    ├── launch.json             # Debugging configuration
-    └── settings.json           # Workspace settings
+poker-solver/
+├── CMakeLists.txt          # CMake build configuration (C++20, Qt6, OpenMP, ASan)
+├── README.md               # Project overview and quick start guide
+├── CODEBASE_GUIDE.md       # Comprehensive architectural deep dive for all files
+├── include/                # Public headers organized strictly by subsystem
+│   └── poker_solver/
+│       ├── evaluator/      # Hand strength evaluators & lookup table dictionary
+│       ├── core/           # 64-bit bitboard cards, deck, math, flop isomorphism
+│       ├── kuhn/           # Kuhn poker benchmark setup
+│       ├── ranges/         # Range syntax parser, combos, river evaluation cache
+│       ├── solver/         # CFR+ engines, exploitability & best response calculator
+│       └── tree/           # Extensive game tree nodes, actions, and scenario rules
+├── src/                    # Source implementations matching include/
+│   ├── core/
+│   ├── evaluator/
+│   ├── gui/                # Qt6 desktop application, explorer & dark styling
+│   ├── kuhn/
+│   ├── ranges/
+│   ├── solver/
+│   └── tree/
+├── tests/                  # GoogleTest unit, integration, and exploitability suites
+├── test_data/              # Benchmark scenario configs and hand rank dictionaries
+├── third_party/            # External dependencies (googletest, nlohmann/json)
+│   ├── googletest/
+│   └── nlohmann/
+├── docs/                   # Self-study and step-by-step verification guide
+│   └── VERIFICATION_GUIDE.md
+├── mockups/                # UI HTML and TSX design references
+├── scripts/                # Verification scripts (e.g., canonical flop isomorphism)
+└── images/
+    └── screenshots/        # Application UI screenshots
 ```
 
-### File Explanations
-- **CMakeLists.txt:**  
-  Defines the project settings, source files, and Qt module dependencies.
-
-- **main.cpp:**  
-  The entry point of the application. It initializes the Qt framework and launches the Main Window.
-
-- **MainWindow.cpp / MainWindow.h:**  
-  Contains the implementation and declaration for the main application window, which integrates various dialogs.
-
-- **RangeSelector.cpp / RangeSelector.h:**  
-  Implements a dialog that allows users to select poker hand ranges interactively.
-
-- **StrategyExplorer.cpp / StrategyExplorer.h:**  
-  Implements the Strategy Explorer, including a dynamic 13×13 hand matrix that auto-scales with the window size.
-
-- **resources.qrc:**  
-  Aggregates all external assets (images, stylesheets) into a single resource file for easier management.
-
-- **styles/dark.qss:**  
-  The stylesheet defining the dark theme that gives the application its modern look.
-
-- **HTML Files:**  
-  Serve as design references to keep the UI layout and styling consistent.
-
-- **.vscode Directory:**  
-  Contains Visual Studio Code configuration files to aid in development with features like IntelliSense and debugging.
-
-## Installation & Build 🔧
-
-Follow these steps to set up and build the project:
-
-1. **Generate the build files:**
-   ```bash
-   cmake -S . -B build
-   ```
-
-2. **Build the project:**
-   ```bash
-   cmake --build build
-   ```
-
-3. **Run the executable:**
-   ```bash
-   ./build/poker_solver_ui
-   ```
-
-*Note: Ensure you have CMake, Qt6, and a C++17 compatible compiler installed.*
-
-## Usage 🎮
-
-- **Main Window:**  
-  Acts as the central hub that integrates various dialogs and displays the dynamic hand matrix.
-
-- **Dynamic Hand Matrix:**  
-  Accessible via the Strategy Explorer, it adjusts its cell sizes based on the window's dimensions.
-
-- **Range Selector:**  
-  A user-friendly dialog that enables the selection and modification of card ranges.
-
-## Dependencies 📦
-
-- **Qt6:**  
-  Utilized for building the graphical interface (Modules: Widgets, Core, Gui).
-
-- **C++17:**  
-  Leverages C++17 features to ensure modern, efficient code.
-
-- **CMake:**  
-  Handles cross-platform configuration and building.
-
-## Contributing 🤝
-
-Contributions are highly welcome! To get started:
-
-1. **Fork the Repository:**  
-   Click the "Fork" button at the top right to create your own copy of the project.
-
-2. **Create a Branch:**  
-   Use descriptive branch names, e.g., `feature/dynamic-hand-matrix`.
-
-3. **Commit Your Changes:**  
-   Make sure your commits are clear and follow the project's coding standards.
-
-4. **Submit a Pull Request:**  
-   Provide a thorough description of your changes, referencing any related issues.
-
-For more detailed guidelines, please refer to our [CONTRIBUTING.md](CONTRIBUTING.md) (if available).
-
-## License 📄
-
-This project is licensed under the [Your License Name](LICENSE) *(update with your actual license info)*.  
-Feel free to add any additional information regarding licensing as necessary.
-
-## Future Improvements 🔮
-
-- **Solver Logic Integration:**  
-  Enhance backend functionalities to deeply integrate the solving engine with the UI.
-
-- **Multi-threading Enhancements:**  
-  Optimize performance by implementing advanced multi-threaded operations.
-
-- **Enhanced Visualizations:**  
-  Explore interactive data visualizations for game trees, range distributions, and strategy recommendations.
-
-- **User Experience Refinements:**  
-  Improve error handling, include loading indicators, and refine the responsive design for even smoother interactions.
+> - For a complete file-by-file breakdown of algorithms, data structures, and subsystems, read the [CODEBASE_GUIDE.md](CODEBASE_GUIDE.md).
+> - For a step-by-step bottom-up verification and self-study plan, read the [docs/VERIFICATION_GUIDE.md](docs/VERIFICATION_GUIDE.md).
 
 ---
 
-Thank you for checking out Poker Solver UI!  
-Happy coding, and may the odds be ever in your favor! 🎉
+## Installation & Build 🔧
+
+### Prerequisites
+- **Compiler:** Modern C++20 compliant compiler (Apple Clang 14+, GCC 11+, or Clang 13+)
+- **Build System:** CMake $\ge 3.10$
+- **GUI Toolkit:** Qt6 (Widgets, Gui, Core)
+- **Parallelism:** OpenMP runtime (`libomp` on macOS via Homebrew)
+
+### Building on macOS / Linux
+
+1. **Clone the repository:**
+   ```bash
+   git clone --recursive https://github.com/oleksandrBondarenko12/poker-solver.git
+   cd poker-solver
+   ```
+
+2. **Configure with CMake:**
+   ```bash
+   cmake -B build -DCMAKE_BUILD_TYPE=Release
+   ```
+
+3. **Compile all targets:**
+   ```bash
+   cmake --build build -j
+   ```
+
+---
+
+## Executables & Verification 🎮
+
+### 1. Main Graphical Application (`poker_solver_ui`)
+Launch the full desktop solver configuration and exploration app:
+```bash
+./build/poker_solver_ui
+```
+
+### 2. Standalone Strategy Explorer (`test_explorer`)
+Inspect and interact with any dumped solver JSON strategy:
+```bash
+# Launch interactive explorer window
+./build/test_explorer test_data/custom_gui_scenario.json
+
+# Headless automated validation
+./build/test_explorer --verify test_data/custom_gui_scenario.json
+```
+
+### 3. Comprehensive Test Suite (`poker_solver_tests`)
+Run the 89 automated tests spanning bitboards, isomorphism, CFR convergence, and exploitability bounds:
+```bash
+./build/poker_solver_tests
+```
+
+Or run targeted fast unit tests:
+```bash
+./build/poker_solver_tests --gtest_filter="-*CfrPlusSolverIntegrationTest*"
+```
+
+---
+
+## Verification & Exploitability Benchmarks 📊
+
+The solver is verified against theoretical zero-sum equilibrium benchmarks:
+
+| Benchmark Scenario | Board | Pot | Convergence / Exploitability | Zero-Sum Invariance |
+| :--- | :--- | :--- | :--- | :--- |
+| **`SimpleRiverTest`** | `Ts Jh 2h 4c 5d` | 30.0 | **0.00017%** ($1.7 \times 10^{-4}\%$) | $EV_{IP} + EV_{OOP} = 0.00000000$ |
+| **`SimpleFlopTest`** | `Ts Jh 2h` | 30.0 | **0.3765%** | $EV_{IP} + EV_{OOP} = -0.0000$ |
+| **`CustomGuiScenarioTest`** | `Qs Jh 2h` | 50.0 | **3.1567%** (after 1k iterations) | Monotonic exploitability drop |
+| **Injected Vulnerability Test** | `Ts Jh 2h 4c 5d` | 30.0 | Jumps to **25% - 44%** on leaks | Proves exploitability sensitivity |
+
+---
+
+## Dependencies 📦
+
+- **[Qt6](https://www.qt.io/)**: Widgets, Gui, Core for native cross-platform GUI rendering.
+- **[OpenMP](https://www.openmp.org/)**: Multi-threaded game tree chance node sweep.
+- **[nlohmann/json](https://github.com/nlohmann/json)**: Modern C++ JSON library bundled in `third_party/nlohmann/`.
+- **[Google Test](https://github.com/google/googletest)**: C++ testing framework bundled in `third_party/googletest/`.
+
+---
+
+## Contributing 🤝
+
+Contributions are welcome! Please follow these guidelines:
+1. Ensure all code conforms to modern C++20 and snake_case naming conventions.
+2. Maintain zero loose files under `include/poker_solver/` by organizing headers into appropriate subsystems.
+3. Verify that all tests pass (`./build/poker_solver_tests`) with zero exploitability regressions before submitting pull requests.
+
+---
+
+## License 📄
+
+This project is licensed under the MIT License.

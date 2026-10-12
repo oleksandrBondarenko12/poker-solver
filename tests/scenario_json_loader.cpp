@@ -1,5 +1,5 @@
 #include "scenario_json_loader.h" // Includes declarations and inline definitions
-#include "poker_solver/json.hpp"
+#include <nlohmann/json.hpp>
 #include "poker_solver/core/poker_card.h"
 #include "poker_solver/ranges/range_syntax_parser.h"
 #include <fstream>
@@ -34,17 +34,17 @@ TestScenario::TestScenario(const json& j_scenario, const core::Deck& deck) :
             solver_config.exploitability_interval = get_json_value_or_default(j_sc, "exploitability_interval", 25);
         }
 
-        // Populate initial_board_ints_for_pcm from the game_rule member
+        // Populate initial_board_ints_for_phm from the game_rule member
         // which was constructed using initial_board from JSON via create_rule_from_json
-        this->initial_board_ints_for_pcm = this->game_rule.GetInitialBoardCardsInt();
+        this->initial_board_ints_for_phm = this->game_rule.GetInitialBoardCardsInt();
 
 
         const auto& j_ranges = j_scenario.at("player_ranges");
         std::string range_ip_str = j_ranges.at("ip").get<std::string>();
         std::string range_oop_str = j_ranges.at("oop").get<std::string>();
 
-        range_ip = ranges::PrivateRangeConverter::StringToPrivateCards(range_ip_str, this->initial_board_ints_for_pcm);
-        range_oop = ranges::PrivateRangeConverter::StringToPrivateCards(range_oop_str, this->initial_board_ints_for_pcm);
+        range_ip = ranges::PrivateRangeConverter::StringToPrivateHands(range_ip_str, this->initial_board_ints_for_phm);
+        range_oop = ranges::PrivateRangeConverter::StringToPrivateHands(range_oop_str, this->initial_board_ints_for_phm);
 
         expected_output_file = get_json_value_or_default(j_scenario, "expected_output_file", "");
 

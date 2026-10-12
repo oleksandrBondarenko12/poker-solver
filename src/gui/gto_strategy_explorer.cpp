@@ -611,7 +611,7 @@ void StrategyExplorer::onPlayerRangeToggled(int player) {
     }
 }
 
-void StrategyExplorer::buildGameTreeUI(const nlohmann::json& node, QTreeWidgetItem* parent_item, const std::string& current_path, const QString& action_label) {
+void StrategyExplorer::buildGameTreeUI(const nlohmann::json& node, QTreeWidgetItem* parent_item, const std::string& current_path, const QString& action_label, int actor_player) {
     if (node.is_null()) return;
 
     QTreeWidgetItem* item = new QTreeWidgetItem;
@@ -620,8 +620,8 @@ void StrategyExplorer::buildGameTreeUI(const nlohmann::json& node, QTreeWidgetIt
     if (node.contains("node_type")) {
         std::string type = node["node_type"].get<std::string>();
         if (type == "Action") {
-            int player = node.contains("player") ? node["player"].get<int>() : 0;
-            QString playerTag = (player == 0 ? "[IP]" : "[OOP]");
+            int to_act_player = node.contains("player") ? node["player"].get<int>() : 0;
+            QString toActTag = (to_act_player == 0 ? "[IP]" : "[OOP]");
 
             QString effective_action = action_label;
             if (effective_action.isEmpty() && node.contains("action_label")) {
@@ -636,12 +636,14 @@ void StrategyExplorer::buildGameTreeUI(const nlohmann::json& node, QTreeWidgetIt
                     if (node.contains("board") && node["board"].is_array() && node["board"].size() == 5) {
                         street = "River";
                     }
-                    label = QString("%1: %2 %3").arg(street, formattedCard, playerTag);
+                    label = QString("%1: %2 %3").arg(street, formattedCard, toActTag);
                 } else {
-                    label = QString("%1 %2").arg(playerTag, effective_action);
+                    int acting_who = (actor_player >= 0) ? actor_player : (1 - to_act_player);
+                    QString actingTag = (acting_who == 0 ? "IP" : "OOP");
+                    label = QString("%1 %2").arg(actingTag, effective_action);
                 }
             } else {
-                label = QString("%1 Root Decision").arg(playerTag);
+                label = QString("%1 Root Decision").arg(toActTag);
             }
         } else if (type == "Chance") {
             QString street = "Turn";
@@ -650,9 +652,13 @@ void StrategyExplorer::buildGameTreeUI(const nlohmann::json& node, QTreeWidgetIt
             }
             label = QString("Chance (Deal %1)").arg(street);
         } else if (type == "Terminal") {
-            label = action_label.isEmpty() ? "Fold (Terminal)" : QString("%1 (Fold)").arg(action_label);
+            int acting_who = (actor_player >= 0) ? actor_player : 0;
+            QString actingTag = (acting_who == 0 ? "IP" : "OOP");
+            label = action_label.isEmpty() ? QString("%1 Fold").arg(actingTag) : QString("%1 %2 (Fold)").arg(actingTag, action_label);
         } else if (type == "Showdown") {
-            label = action_label.isEmpty() ? "Showdown" : QString("%1 (Showdown)").arg(action_label);
+            int acting_who = (actor_player >= 0) ? actor_player : 0;
+            QString actingTag = (acting_who == 0 ? "IP" : "OOP");
+            label = action_label.isEmpty() ? QString("%1 Call (Showdown)").arg(actingTag) : QString("%1 %2 (Showdown)").arg(actingTag, action_label);
         }
     }
 
@@ -662,6 +668,8 @@ void StrategyExplorer::buildGameTreeUI(const nlohmann::json& node, QTreeWidgetIt
 
     item->setText(0, label);
     item->setData(0, Qt::UserRole, QString::fromStdString(current_path));
+    item->setData(0, Qt::UserRole + 10, action_label);
+    item->setData(0, Qt::UserRole + 11, actor_player);
 
     if (parent_item) {
         parent_item->addChild(item);
@@ -688,6 +696,7 @@ void StrategyExplorer::buildGameTreeUI(const nlohmann::json& node, QTreeWidgetIt
 }
 
 void StrategyExplorer::populateImmediateChildren(QTreeWidgetItem* parent_item, const nlohmann::json& node, const std::string& current_path) {
+    int parent_player = node.contains("player") ? node["player"].get<int>() : -1;
     if (node.contains("children") && node["children"].is_array()) {
         const auto& children = node["children"];
         for (size_t i = 0; i < children.size(); ++i) {
@@ -698,12 +707,12 @@ void StrategyExplorer::populateImmediateChildren(QTreeWidgetItem* parent_item, c
                 if (child.contains("action")) {
                     act = QString::fromStdString(child["action"].get<std::string>());
                 }
-                buildGameTreeUI(child["node"], parent_item, child_path, act);
+                buildGameTreeUI(child["node"], parent_item, child_path, act, parent_player);
             }
         }
     } else if (node.contains("child") && !node["child"].is_null()) {
         std::string child_path = current_path + "/child";
-        buildGameTreeUI(node["child"], parent_item, child_path);
+        buildGameTreeUI(node["child"], parent_item, child_path, "", parent_player);
     }
 }
 
@@ -729,7 +738,7 @@ void StrategyExplorer::onItemExpanded(QTreeWidgetItem *item) {
     }
 }
 
-void StrategyExplorer::updateHeader(const nlohmann::json& node) {
+void StrategyExplorer::updateHeader(const nlohmann::json& node, const QString& last_action, int last_actor) {
     // Board cards
     std::vector<std::string> board_cards;
     if (node.contains("board") && node["board"].is_array() && !node["board"].empty()) {
@@ -766,16 +775,16 @@ void StrategyExplorer::updateHeader(const nlohmann::json& node) {
     } else {
         int acting_player = node.contains("player") ? node["player"].get<int>() : 0;
         QString playerTag = (acting_player == 0 ? "IP (Player 0)" : "OOP (Player 1)");
-        QString actionName = "Root Action";
-        if (node.contains("action_label")) {
-            QString qAct = QString::fromStdString(node["action_label"].get<std::string>());
-            if (qAct.startsWith("deal:")) {
-                actionName = QString("Dealt %1").arg(formatCardPlain(qAct.mid(5)));
+        QString actionDesc = "Root Opening Decision";
+        if (!last_action.isEmpty()) {
+            if (last_action.startsWith("deal:")) {
+                actionDesc = QString("Dealt %1").arg(formatCardPlain(last_action.mid(5)));
             } else {
-                actionName = qAct;
+                QString actorTag = (last_actor == 0 ? "IP" : (last_actor == 1 ? "OOP" : ""));
+                actionDesc = QString("Facing: %1 %2").arg(actorTag, last_action).trimmed();
             }
         }
-        nodeInfoLabel->setText(QString("Active: <b style=\"color: #60A5FA;\">%1</b> | Node: %2").arg(playerTag, actionName));
+        nodeInfoLabel->setText(QString("To Act: <b style=\"color: #60A5FA;\">%1</b> | %2").arg(playerTag, actionDesc));
 
         double pot = node.contains("pot") ? node["pot"].get<double>() : 0.0;
         potLabel->setText(QString("Current Pot: <b style=\"color: #34D399;\">%1 chips</b>").arg(pot, 0, 'f', 1));
@@ -793,6 +802,8 @@ void StrategyExplorer::updateHeader(const nlohmann::json& node) {
 
 void StrategyExplorer::onNodeSelected(QTreeWidgetItem *item, int column) {
     QString path = item->data(0, Qt::UserRole).toString();
+    QString last_action = item->data(0, Qt::UserRole + 10).toString();
+    int last_actor = item->data(0, Qt::UserRole + 11).isValid() ? item->data(0, Qt::UserRole + 11).toInt() : -1;
     try {
         nlohmann::json node;
         if (path.isEmpty()) {
@@ -802,7 +813,7 @@ void StrategyExplorer::onNodeSelected(QTreeWidgetItem *item, int column) {
         }
         current_node_ = node;
         current_display_player_ = -1; // Reset perspective so it follows acting player of selected node
-        updateHeader(node);
+        updateHeader(node, last_action, last_actor);
         updateStrategyGrid(node);
 
         // Refresh combo inspector: ensure an in-range cell is selected

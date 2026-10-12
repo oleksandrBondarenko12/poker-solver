@@ -1,4 +1,4 @@
-#include "poker_solver/compairer/table_hand_evaluator.h" // Adjust path if necessary
+#include "poker_solver/evaluator/table_hand_evaluator.h"
 
 #include <algorithm> // For std::min
 #include <cassert>
@@ -28,7 +28,7 @@ constexpr uint64_t kRankHashSum0 = 0x5555555555555555ULL;
 constexpr uint64_t kRankHashSum1 = 0x3333333333333333ULL;
 constexpr uint64_t kRankHashSum2 = 0x0F0F0F0F0F0F0F0FULL;
 
-uint64_t Dic5Compairer::ranks_hash(uint64_t cards_mask) {
+uint64_t TableHandEvaluator::ranks_hash(uint64_t cards_mask) {
   cards_mask =
       (cards_mask & kRankHashSum0) + ((cards_mask >> 1) & kRankHashSum0);
   cards_mask =
@@ -36,7 +36,7 @@ uint64_t Dic5Compairer::ranks_hash(uint64_t cards_mask) {
   return cards_mask;
 }
 
-bool Dic5Compairer::is_flush(uint64_t cards_mask) {
+bool TableHandEvaluator::is_flush(uint64_t cards_mask) {
   uint64_t count_mask = cards_mask;
   count_mask = count_mask - ((count_mask >> 1) & kRankHashSum0);
   count_mask =
@@ -61,7 +61,7 @@ bool Dic5Compairer::is_flush(uint64_t cards_mask) {
 
 // --- Constructor ---
 
-Dic5Compairer::Dic5Compairer(const std::string &dictionary_filepath)
+TableHandEvaluator::TableHandEvaluator(const std::string &dictionary_filepath)
     : dictionary_path_(dictionary_filepath) {
 
   std::vector<fs::path> candidates = {
@@ -70,8 +70,7 @@ Dic5Compairer::Dic5Compairer(const std::string &dictionary_filepath)
       fs::path("test_data") / dictionary_filepath,
       fs::path("..") / "build" / dictionary_filepath,
       fs::path("..") / "test_data" / dictionary_filepath,
-      fs::path("..") / dictionary_filepath
-  };
+      fs::path("..") / dictionary_filepath};
 
   // 1. Try to load binary cache from any candidate
   for (const auto &cand : candidates) {
@@ -100,9 +99,9 @@ Dic5Compairer::Dic5Compairer(const std::string &dictionary_filepath)
       dictionary_path_ = cand;
       cache_path_ = cand;
       cache_path_.replace_extension(".bin");
-      std::cout
-          << "[INFO] Binary cache not found or invalid. Loading from text file: "
-          << dictionary_path_.string() << std::endl;
+      std::cout << "[INFO] Binary cache not found or invalid. Loading from "
+                   "text file: "
+                << dictionary_path_.string() << std::endl;
       try {
         load_dictionary_from_text(dictionary_path_.string());
         std::cout << "[INFO] Successfully loaded ranks from text file."
@@ -130,13 +129,14 @@ Dic5Compairer::Dic5Compairer(const std::string &dictionary_filepath)
 
   std::ostringstream oss;
   oss << "Cannot find or open hand rank dictionary file '"
-      << dictionary_filepath << "' in any search paths (., build/, test_data/, ../)";
+      << dictionary_filepath
+      << "' in any search paths (., build/, test_data/, ../)";
   throw std::runtime_error(oss.str());
 }
 
 // --- Binary Cache Load/Save ---
 
-bool Dic5Compairer::load_binary_cache(const fs::path &cache_filepath) {
+bool TableHandEvaluator::load_binary_cache(const fs::path &cache_filepath) {
   std::ifstream infile(cache_filepath, std::ios::binary);
   if (!infile.is_open()) {
     return false; // Cache file doesn't exist or cannot be opened
@@ -199,7 +199,7 @@ bool Dic5Compairer::load_binary_cache(const fs::path &cache_filepath) {
   return true; // Successfully loaded from cache
 }
 
-bool Dic5Compairer::save_binary_cache(const fs::path &cache_filepath) const {
+bool TableHandEvaluator::save_binary_cache(const fs::path &cache_filepath) const {
   std::ofstream outfile(cache_filepath, std::ios::binary | std::ios::trunc);
   if (!outfile.is_open()) {
     return false; // Cannot open file for writing
@@ -251,7 +251,7 @@ bool Dic5Compairer::save_binary_cache(const fs::path &cache_filepath) const {
 
 // --- Dictionary Loading (from Text) ---
 
-void Dic5Compairer::load_dictionary_from_text(const std::string &filepath) {
+void TableHandEvaluator::load_dictionary_from_text(const std::string &filepath) {
   std::ifstream infile(filepath);
   if (!infile.is_open()) {
     std::ostringstream oss;
@@ -329,7 +329,7 @@ void Dic5Compairer::load_dictionary_from_text(const std::string &filepath) {
 }
 
 // --- Private Lookup Helper ---
-int Dic5Compairer::lookup_5_card_rank(uint64_t hand_mask) const {
+int TableHandEvaluator::lookup_5_card_rank(uint64_t hand_mask) const {
   bool has_flush = is_flush(hand_mask);
   if (has_flush) {
     auto it = flush_ranks_.find(hand_mask);
@@ -342,7 +342,8 @@ int Dic5Compairer::lookup_5_card_rank(uint64_t hand_mask) const {
 }
 
 // --- Private Rank Calculation Helper ---
-int Dic5Compairer::get_best_rank_for_cards(const std::vector<int> &cards) const {
+int TableHandEvaluator::get_best_rank_for_cards(
+    const std::vector<int> &cards) const {
   size_t num_cards = cards.size();
   if (num_cards < 5)
     return kInvalidRank;
@@ -371,8 +372,8 @@ int Dic5Compairer::get_best_rank_for_cards(const std::vector<int> &cards) const 
 }
 
 // --- Public Interface Methods (Implementations remain the same) ---
-int Dic5Compairer::get_hand_rank(const std::vector<int> &private_hand,
-                               const std::vector<int> &public_board) const {
+int TableHandEvaluator::get_hand_rank(const std::vector<int> &private_hand,
+                                 const std::vector<int> &public_board) const {
   if (private_hand.size() != 2)
     return kInvalidRank;
   std::vector<int> all_cards = private_hand;
@@ -394,8 +395,8 @@ int Dic5Compairer::get_hand_rank(const std::vector<int> &private_hand,
   return get_best_rank_for_cards(all_cards);
 }
 
-int Dic5Compairer::get_hand_rank(uint64_t private_mask,
-                               uint64_t public_mask) const {
+int TableHandEvaluator::get_hand_rank(uint64_t private_mask,
+                                 uint64_t public_mask) const {
   if (core::Card::DoBoardsOverlap(private_mask, public_mask))
     return kInvalidRank;
   uint64_t combined_mask = private_mask | public_mask;
@@ -404,9 +405,9 @@ int Dic5Compairer::get_hand_rank(uint64_t private_mask,
 }
 
 core::ComparisonResult
-Dic5Compairer::compare_hands(const std::vector<int> &private_hand1,
-                            const std::vector<int> &private_hand2,
-                            const std::vector<int> &public_board) const {
+TableHandEvaluator::compare_hands(const std::vector<int> &private_hand1,
+                             const std::vector<int> &private_hand2,
+                             const std::vector<int> &public_board) const {
   uint64_t private1_mask = 0;
   uint64_t private2_mask = 0;
   try {
@@ -429,9 +430,9 @@ Dic5Compairer::compare_hands(const std::vector<int> &private_hand1,
   }
 }
 
-core::ComparisonResult Dic5Compairer::compare_hands(uint64_t private_mask1,
-                                                   uint64_t private_mask2,
-                                                   uint64_t public_mask) const {
+core::ComparisonResult
+TableHandEvaluator::compare_hands(uint64_t private_mask1, uint64_t private_mask2,
+                             uint64_t public_mask) const {
   if (core::Card::DoBoardsOverlap(private_mask1, private_mask2)) {
     return core::ComparisonResult::kTie;
   }

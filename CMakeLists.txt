@@ -5,6 +5,9 @@ if(POLICY CMP0072)
 endif()
 project(PokerSolver LANGUAGES CXX)
 
+# Generate compile_commands.json for clangd and language servers
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # --- Set C++ Standard ---
 set(CMAKE_CXX_STANDARD 20) # Use C++17 (required for std::optional, std::filesystem)
 set(CMAKE_CXX_STANDARD_REQUIRED True) # Error if C++17 is not supported
@@ -70,7 +73,7 @@ add_library(PokerSolverCore
     src/tree/scenario_game_rule.cpp
     src/tree/street_betting_rule.cpp
     src/tree/tree_building_config.cpp
-    src/compairer/table_hand_evaluator.cpp
+    src/evaluator/table_hand_evaluator.cpp
     src/ranges/hole_card_combination.cpp
     src/ranges/range_distribution_manager.cpp
     src/ranges/evaluated_river_combo.cpp
@@ -88,7 +91,8 @@ add_library(PokerSolverCore
 target_include_directories(PokerSolverCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include/poker_solver
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nlohmann # Add path to nlohmann/json if it's here
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nlohmann
 )
 # For std::filesystem
 target_link_libraries(PokerSolverCore PRIVATE Threads::Threads) # Threads might not be needed for filesystem
@@ -177,6 +181,8 @@ add_executable(poker_solver_tests
     tests/range_distribution_manager_test.cpp
     tests/suit_permutation_utils_test.cpp
     tests/scenario_json_loader.cpp
+    tests/canonical_flop_isomorphism_test.cpp
+    tests/discounted_cfr_engine_test.cpp
     tests/public_chance_cfr_integration_test.cpp
 )
 

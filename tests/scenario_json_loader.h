@@ -5,7 +5,7 @@
 #include "poker_solver/solver/public_chance_cfr_solver.h"
 #include "poker_solver/ranges/hole_card_combination.h"
 #include "poker_solver/core/card_deck.h"
-#include "poker_solver/json.hpp"
+#include <nlohmann/json.hpp>
 #include "poker_solver/tree/street_betting_rule.h"
 #include "poker_solver/core/poker_card.h"
 #include "poker_solver/tree/tree_building_config.h"
@@ -142,12 +142,12 @@ inline config::Rule create_rule_from_json(const json& j_rule, const core::Deck& 
 struct TestScenario {
     std::string test_case_name;
     std::string description;
-    solver::PCfrSolver::Config solver_config;
+    solver::CfrPlusSolver::Config solver_config;
     config::Rule game_rule;
-    std::vector<core::PrivateCards> range_ip;
-    std::vector<core::PrivateCards> range_oop;
+    std::vector<core::PrivateHand> range_ip;
+    std::vector<core::PrivateHand> range_oop;
     std::string expected_output_file;
-    std::vector<int> initial_board_ints_for_pcm; // For PrivateCardsManager
+    std::vector<int> initial_board_ints_for_phm; // For PrivateHandManager
 
     // Constructor declaration
     TestScenario(const nlohmann::json& j_scenario, const core::Deck& deck);

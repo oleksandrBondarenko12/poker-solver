@@ -14,14 +14,26 @@ namespace ranges {
 // Converts poker hand range strings into collections of PrivateCards objects.
 class PrivateRangeConverter {
  public:
-  static std::vector<core::PrivateCards> string_to_private_cards(
+  static std::vector<core::PrivateHand> string_to_private_hands(
       std::string_view range_string,
       const std::vector<int>& initial_board_ints = {});
 
-  static std::vector<core::PrivateCards> StringToPrivateCards(
+  static std::vector<core::PrivateHand> StringToPrivateHands(
       std::string_view range_string,
       const std::vector<int>& initial_board_ints = {}) {
-    return string_to_private_cards(range_string, initial_board_ints);
+    return string_to_private_hands(range_string, initial_board_ints);
+  }
+
+  static std::vector<core::PrivateHand> string_to_private_cards(
+      std::string_view range_string,
+      const std::vector<int>& initial_board_ints = {}) {
+    return string_to_private_hands(range_string, initial_board_ints);
+  }
+
+  static std::vector<core::PrivateHand> StringToPrivateCards(
+      std::string_view range_string,
+      const std::vector<int>& initial_board_ints = {}) {
+    return string_to_private_hands(range_string, initial_board_ints);
   }
 
  private:
@@ -30,33 +42,33 @@ class PrivateRangeConverter {
   static void parse_range_component(
       std::string_view component,
       uint64_t initial_board_mask,
-      std::vector<core::PrivateCards>& output_cards);
+      std::vector<core::PrivateHand>& output_cards);
 
   static void generate_pair_combos(
       char rank_char,
       double weight,
       uint64_t initial_board_mask,
-      std::vector<core::PrivateCards>& output_cards);
+      std::vector<core::PrivateHand>& output_cards);
 
   static void generate_suited_combos(
       char rank1_char,
       char rank2_char,
       double weight,
       uint64_t initial_board_mask,
-      std::vector<core::PrivateCards>& output_cards);
+      std::vector<core::PrivateHand>& output_cards);
 
   static void generate_offsuit_combos(
       char rank1_char,
       char rank2_char,
       double weight,
       uint64_t initial_board_mask,
-      std::vector<core::PrivateCards>& output_cards);
+      std::vector<core::PrivateHand>& output_cards);
 
   static void generate_specific_combo(
       std::string_view combo_str,
       double weight,
       uint64_t initial_board_mask,
-      std::vector<core::PrivateCards>& output_cards);
+      std::vector<core::PrivateHand>& output_cards);
 };
 
 using RangeSyntaxParser = PrivateRangeConverter;

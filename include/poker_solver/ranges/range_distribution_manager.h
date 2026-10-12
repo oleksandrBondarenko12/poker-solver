@@ -12,18 +12,18 @@ namespace poker_solver {
 namespace ranges {
 
 // Manages initial private hand ranges for multiple players.
-class PrivateCardsManager {
+class PrivateHandManager {
  public:
-  PrivateCardsManager(
-      std::vector<std::vector<core::PrivateCards>> initial_ranges,
+  PrivateHandManager(
+      std::vector<std::vector<core::PrivateHand>> initial_ranges,
       uint64_t initial_board_mask);
 
   // Modern snake_case methods
   size_t get_num_players() const { return num_players_; }
   size_t GetNumPlayers() const { return get_num_players(); }
 
-  const std::vector<core::PrivateCards>& get_player_range(size_t player_index) const;
-  const std::vector<core::PrivateCards>& GetPlayerRange(size_t player_index) const {
+  const std::vector<core::PrivateHand>& get_player_range(size_t player_index) const;
+  const std::vector<core::PrivateHand>& GetPlayerRange(size_t player_index) const {
     return get_player_range(player_index);
   }
 
@@ -51,12 +51,12 @@ class PrivateCardsManager {
 
   size_t num_players_;
   uint64_t initial_board_mask_;
-  std::vector<std::vector<core::PrivateCards>> player_ranges_;
+  std::vector<std::vector<core::PrivateHand>> player_ranges_;
   std::unordered_map<std::size_t, std::vector<std::optional<size_t>>> hand_hash_to_indices_;
   std::vector<std::vector<double>> initial_reach_probs_;
 };
 
-using RangeDistributionManager = PrivateCardsManager;
+using RangeDistributionManager = PrivateHandManager;
 
 } // namespace ranges
 } // namespace poker_solver

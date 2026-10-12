@@ -2,10 +2,10 @@
     "test_case_name": "CustomGuiScenarioTest",
     "description": "Custom test scenario based on GUI screenshots.",
     "solver_config": {
-      "iterations": 1000,
+      "iterations": 200,
       "threads": 8,
-      "target_exploitability": 0.5,
-      "exploitability_interval": 50
+      "target_exploitability": 0.0,
+      "exploitability_interval": 20
     },
     "game_rule": {
       "starting_round": "Flop",
@@ -17,7 +17,7 @@
         "sb": 1.0,
         "bb": 2.0
       },
-      "effective_stack": 200.0,
+      "effective_stack": 225.0,
       "raise_limit_per_street": 3,
       "all_in_threshold_ratio": 0.67,
       "initial_board": ["Qs", "Jh", "2h"],

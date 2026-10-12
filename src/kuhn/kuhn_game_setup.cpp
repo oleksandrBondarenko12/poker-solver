@@ -12,22 +12,22 @@
 namespace poker_solver {
 namespace kuhn {
 
-// --- KuhnCompairer Implementation ---
+// --- KuhnHandEvaluator Implementation ---
 
-core::ComparisonResult KuhnCompairer::compare_hands(int card1, int card2) const {
+core::ComparisonResult KuhnHandEvaluator::compare_hands(int card1, int card2) const {
     if (card1 > card2) return core::ComparisonResult::kPlayer1Wins; // P0 wins (in typical CompareHands, P1 is first arg)
     if (card2 > card1) return core::ComparisonResult::kPlayer2Wins; // P1 wins
     return core::ComparisonResult::kTie;
 }
 
-core::ComparisonResult KuhnCompairer::compare_hands(
+core::ComparisonResult KuhnHandEvaluator::compare_hands(
     const std::vector<int>& private_hand1,
     const std::vector<int>& private_hand2,
     const std::vector<int>&) const {
     return compare_hands(private_hand1[0], private_hand2[0]);
 }
 
-core::ComparisonResult KuhnCompairer::compare_hands(uint64_t mask1, uint64_t mask2, uint64_t) const {
+core::ComparisonResult KuhnHandEvaluator::compare_hands(uint64_t mask1, uint64_t mask2, uint64_t) const {
     auto hand1 = core::Card::Uint64ToCardInts(mask1);
     auto hand2 = core::Card::Uint64ToCardInts(mask2);
     // Find the non-dummy card (which is < 50)
@@ -36,12 +36,12 @@ core::ComparisonResult KuhnCompairer::compare_hands(uint64_t mask1, uint64_t mas
     return compare_hands(c1, c2);
 }
 
-int KuhnCompairer::get_hand_rank(const std::vector<int>& private_hand,
+int KuhnHandEvaluator::get_hand_rank(const std::vector<int>& private_hand,
                                 const std::vector<int>&) const {
     return private_hand[0];
 }
 
-int KuhnCompairer::get_hand_rank(uint64_t mask, uint64_t) const {
+int KuhnHandEvaluator::get_hand_rank(uint64_t mask, uint64_t) const {
     auto hand = core::Card::Uint64ToCardInts(mask);
     int c1 = (hand[0] < 50) ? hand[0] : hand[1];
     return c1;
@@ -106,8 +106,8 @@ std::shared_ptr<tree::GameTree> build_kuhn_game_tree() {
 
 // --- Helper: Kuhn Range ---
 
-std::vector<core::PrivateCards> get_kuhn_initial_range(int dummy_card) {
-    std::vector<core::PrivateCards> range;
+std::vector<core::PrivateHand> get_kuhn_initial_range(int dummy_card) {
+    std::vector<core::PrivateHand> range;
     for (int card = KUHN_CARD_J; card <= KUHN_CARD_K; ++card) {
         // We only use card1 for Kuhn. We set card2 to a non-overlapping dummy card.
         range.emplace_back(card, dummy_card, 1.0);

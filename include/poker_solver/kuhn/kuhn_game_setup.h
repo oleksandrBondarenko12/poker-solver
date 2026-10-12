@@ -6,7 +6,7 @@
 #include <memory>
 #include <stdexcept>
 
-#include "poker_solver/compairer/hand_strength_evaluator.h"
+#include "poker_solver/evaluator/hand_strength_evaluator.h"
 #include "poker_solver/tree/extensive_game_tree.h"
 #include "poker_solver/ranges/hole_card_combination.h"
 
@@ -22,11 +22,11 @@ constexpr int KUHN_DECK_SIZE = 3;
 // Represent actions simply for Kuhn
 enum class KuhnActionType { Check = 0, Bet = 1, Fold = 0, Call = 1 }; // Check/Fold=0, Bet/Call=1
 
-// --- Kuhn Hand Comparer ---
-class KuhnCompairer : public core::Compairer {
+// --- Kuhn Hand Evaluator ---
+class KuhnHandEvaluator : public core::HandStrengthEvaluator {
 public:
-    KuhnCompairer() = default;
-    ~KuhnCompairer() override = default;
+    KuhnHandEvaluator() = default;
+    ~KuhnHandEvaluator() override = default;
 
     // Compares two single Kuhn cards (higher card wins)
     core::ComparisonResult compare_hands(int private_card1, int private_card2) const;
@@ -34,7 +34,7 @@ public:
         return compare_hands(private_card1, private_card2);
     }
 
-    // --- Implementations matching the Compairer interface ---
+    // --- Implementations matching the HandStrengthEvaluator interface ---
     core::ComparisonResult compare_hands(
         const std::vector<int>& private_hand1,
         const std::vector<int>& private_hand2,
@@ -81,7 +81,7 @@ std::shared_ptr<tree::GameTree> build_kuhn_game_tree();
 
 // --- Helper: Kuhn Range ---
 // Creates the initial uniform range {J, Q, K} for Kuhn Poker.
-std::vector<core::PrivateCards> get_kuhn_initial_range(int dummy_card);
+std::vector<core::PrivateHand> get_kuhn_initial_range(int dummy_card);
 
 } // namespace kuhn
 } // namespace poker_solver

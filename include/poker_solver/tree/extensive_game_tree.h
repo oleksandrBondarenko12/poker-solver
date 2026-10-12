@@ -17,7 +17,7 @@ namespace solver {
 class Trainable;
 }
 namespace ranges {
-class PrivateCardsManager;
+class PrivateHandManager;
 }
 }
 

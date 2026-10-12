@@ -1,6 +1,6 @@
 #include "poker_solver/ranges/river_evaluation_cache.h" // Adjust path if necessary
 #include "poker_solver/core/poker_card.h"                     // For Card utilities
-#include "poker_solver/compairer/table_hand_evaluator.h"  // For kInvalidRank - TODO: move constant?
+#include "poker_solver/evaluator/table_hand_evaluator.h"  // For kInvalidRank
 
 #include <algorithm> // For std::sort
 #include <bit>       // For std::popcount (C++20) - include if using
@@ -17,24 +17,45 @@ namespace eval = poker_solver::eval; // For kInvalidRank
 namespace poker_solver {
 namespace ranges {
 
+#include <atomic>
+
+namespace {
+static std::atomic<uint64_t> g_rrm_instance_counter{1};
+
+struct CacheKey {
+  uint64_t instance_id;
+  uint64_t board_mask;
+  bool operator==(const CacheKey &other) const {
+    return instance_id == other.instance_id && board_mask == other.board_mask;
+  }
+};
+
+struct CacheKeyHash {
+  std::size_t operator()(const CacheKey &k) const {
+    return std::hash<uint64_t>()(k.board_mask ^ (k.instance_id * 0x9e3779b97f4a7c15ULL));
+  }
+};
+
 // Thread-local caches to completely eliminate lock contention
-static thread_local std::unordered_map<uint64_t, std::vector<RiverCombs>> tl_player_0_cache;
-static thread_local std::unordered_map<uint64_t, std::vector<RiverCombs>> tl_player_1_cache;
+static thread_local std::unordered_map<CacheKey, std::vector<EvaluatedRiverCombo>, CacheKeyHash> tl_player_0_cache;
+static thread_local std::unordered_map<CacheKey, std::vector<EvaluatedRiverCombo>, CacheKeyHash> tl_player_1_cache;
+} // namespace
 
 // --- Constructor ---
 
-RiverRangeManager::RiverRangeManager(std::shared_ptr<core::Compairer> compairer)
-    : compairer_(std::move(compairer)) { // Use std::move
-  if (!compairer_) {
-    throw std::invalid_argument("Compairer cannot be null.");
+RiverRangeManager::RiverRangeManager(std::shared_ptr<core::HandStrengthEvaluator> evaluator)
+    : evaluator_(std::move(evaluator)),
+      instance_id_(g_rrm_instance_counter.fetch_add(1)) {
+  if (!evaluator_) {
+    throw std::invalid_argument("Hand evaluator cannot be null.");
   }
 }
 
 // --- Public Methods ---
 
-const std::vector<RiverCombs> &RiverRangeManager::get_river_combos(
+const std::vector<EvaluatedRiverCombo> &RiverRangeManager::get_river_combos(
     size_t player_index,
-    const std::vector<core::PrivateCards> &initial_player_range,
+    const std::vector<core::PrivateHand> &initial_player_range,
     uint64_t river_board_mask) {
 
   // Select the appropriate cache based on player index
@@ -47,7 +68,8 @@ const std::vector<RiverCombs> &RiverRangeManager::get_river_combos(
   }
 
   // --- Cache Lookup (Lock-Free Thread-Local) ---
-  auto it = cache.find(river_board_mask);
+  CacheKey key{instance_id_, river_board_mask};
+  auto it = cache.find(key);
   if (it != cache.end()) {
     return it->second;
   }
@@ -64,9 +86,9 @@ const std::vector<RiverCombs> &RiverRangeManager::get_river_combos(
 }
 
 // Overload for vector<int> board input
-const std::vector<RiverCombs> &RiverRangeManager::get_river_combos(
+const std::vector<EvaluatedRiverCombo> &RiverRangeManager::get_river_combos(
     size_t player_index,
-    const std::vector<core::PrivateCards> &initial_player_range,
+    const std::vector<core::PrivateHand> &initial_player_range,
     const std::vector<int> &river_board_ints) {
 
   // Convert board vector to mask, includes validation via CardIntsToUint64
@@ -84,9 +106,9 @@ const std::vector<RiverCombs> &RiverRangeManager::get_river_combos(
 
 // --- Private Calculation and Caching Method ---
 
-const std::vector<RiverCombs> &RiverRangeManager::calculate_and_cache_river_combos(
+const std::vector<EvaluatedRiverCombo> &RiverRangeManager::calculate_and_cache_river_combos(
     size_t player_index,
-    const std::vector<core::PrivateCards> &initial_player_range,
+    const std::vector<core::PrivateHand> &initial_player_range,
     uint64_t river_board_mask) {
 
   // --- DEBUG LOGGING ---
@@ -118,12 +140,12 @@ const std::vector<RiverCombs> &RiverRangeManager::calculate_and_cache_river_comb
     throw std::invalid_argument(oss.str());
   }
 
-  std::vector<RiverCombs> calculated_combos;
+  std::vector<EvaluatedRiverCombo> calculated_combos;
   calculated_combos.reserve(
       initial_player_range.size()); // Pre-allocate approx size
 
   for (size_t i = 0; i < initial_player_range.size(); ++i) {
-    const core::PrivateCards &hand = initial_player_range[i];
+    const core::PrivateHand &hand = initial_player_range[i];
     uint64_t private_mask = hand.GetBoardMask();
 
     // Skip hands that conflict with the river board
@@ -136,8 +158,8 @@ const std::vector<RiverCombs> &RiverRangeManager::calculate_and_cache_river_comb
       continue;
     }
 
-    // Evaluate the 7-card hand rank using the injected compairer
-    int rank = compairer_->GetHandRank(private_mask, river_board_mask);
+    // Evaluate the 7-card hand rank using the injected evaluator
+    int rank = evaluator_->GetHandRank(private_mask, river_board_mask);
 
     // --- DEBUG LOGGING ---
     // std::cout << "[RRM_CALC] Hand: " << hand.ToString()
@@ -157,12 +179,12 @@ const std::vector<RiverCombs> &RiverRangeManager::calculate_and_cache_river_comb
   // NOTE: Sorting descending by rank number (worst hand first).
   std::sort(
       calculated_combos.begin(), calculated_combos.end(),
-      [](const RiverCombs &lhs, const RiverCombs &rhs) {
+      [](const EvaluatedRiverCombo &lhs, const EvaluatedRiverCombo &rhs) {
         // Treat invalid ranks as the absolute worst
         bool lhs_invalid =
-            (lhs.rank == eval::Dic5Compairer::kInvalidRank || lhs.rank == -1);
+            (lhs.rank == eval::TableHandEvaluator::kInvalidRank || lhs.rank == -1);
         bool rhs_invalid =
-            (rhs.rank == eval::Dic5Compairer::kInvalidRank || rhs.rank == -1);
+            (rhs.rank == eval::TableHandEvaluator::kInvalidRank || rhs.rank == -1);
 
         if (lhs_invalid && rhs_invalid)
           return false; // Equal (both invalid)
@@ -178,7 +200,8 @@ const std::vector<RiverCombs> &RiverRangeManager::calculate_and_cache_river_comb
   // --- Cache Insertion (Lock-Free Thread-Local) ---
   // Select cache again
   auto &cache = (player_index == 0) ? tl_player_0_cache : tl_player_1_cache;
-  auto result = cache.emplace(river_board_mask, std::move(calculated_combos));
+  CacheKey key{instance_id_, river_board_mask};
+  auto result = cache.emplace(key, std::move(calculated_combos));
   return result.first->second;
 }
 

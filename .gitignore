@@ -31,26 +31,8 @@ Makefile
 .cache/
 *.bin
 *_actual_output.json
-crash.ips
-test_combo
-test_canonical.py
-five_card_strength.txt
-
-# Ignore TypeScript files
-*.tsx
-
-# Ignore shell scripts
-*.sh
-
-# Ignore auto-generated files
-poker_solver_ui_autogen/
-poker_solver_ui
-
-# Ignore build directory
-build/
-
-# Ignore title files
-title=*
+*.ips
+compile_commands.json
 
 # Ignore reference solver
 reference_solver

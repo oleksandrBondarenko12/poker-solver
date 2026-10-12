@@ -1,5 +1,5 @@
-#ifndef POKER_SOLVER_CORE_HAND_STRENGTH_EVALUATOR_H_
-#define POKER_SOLVER_CORE_HAND_STRENGTH_EVALUATOR_H_
+#ifndef POKER_SOLVER_EVALUATOR_HAND_STRENGTH_EVALUATOR_H_
+#define POKER_SOLVER_EVALUATOR_HAND_STRENGTH_EVALUATOR_H_
 
 #include "poker_solver/core/poker_card.h"
 #include <cstdint>
@@ -11,9 +11,9 @@ namespace core {
 enum class ComparisonResult { kPlayer1Wins, kPlayer2Wins, kTie };
 
 // Abstract base class (interface) for poker hand evaluation and comparison.
-class Compairer {
+class HandStrengthEvaluator {
  public:
-  virtual ~Compairer() = default;
+  virtual ~HandStrengthEvaluator() = default;
 
   // Modern snake_case methods
   virtual ComparisonResult compare_hands(const std::vector<int>& private_hand1,
@@ -29,7 +29,7 @@ class Compairer {
 
   virtual int get_hand_rank(uint64_t private_mask, uint64_t public_mask) const = 0;
 
-  // Backward-compatibility wrappers
+  // Convenience wrappers
   ComparisonResult CompareHands(const std::vector<int>& private_hand1,
                                const std::vector<int>& private_hand2,
                                const std::vector<int>& public_board) const {
@@ -52,9 +52,7 @@ class Compairer {
   }
 };
 
-using HandStrengthEvaluator = Compairer;
-
 } // namespace core
 } // namespace poker_solver
 
-#endif // POKER_SOLVER_CORE_HAND_STRENGTH_EVALUATOR_H_
+#endif // POKER_SOLVER_EVALUATOR_HAND_STRENGTH_EVALUATOR_H_

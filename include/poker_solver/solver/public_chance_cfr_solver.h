@@ -6,7 +6,7 @@
 #include "poker_solver/tree/game_tree_node_types.h"
 #include "poker_solver/ranges/range_distribution_manager.h"
 #include "poker_solver/ranges/river_evaluation_cache.h"
-#include "poker_solver/compairer/hand_strength_evaluator.h"
+#include "poker_solver/evaluator/hand_strength_evaluator.h"
 #include "poker_solver/core/card_deck.h"
 #include "poker_solver/core/poker_card.h"
 #include "poker_solver/tree/scenario_game_rule.h"
@@ -16,14 +16,14 @@
 #include <string>
 #include <atomic>
 #include <functional>
-#include "poker_solver/json.hpp"
+#include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
 namespace poker_solver {
 namespace solver {
 
-class PCfrSolver : public Solver {
+class CfrPlusSolver : public Solver {
  public:
   struct Config {
     int iteration_limit;
@@ -42,11 +42,11 @@ class PCfrSolver : public Solver {
           exploitability_interval(25) {}
   };
 
-  PCfrSolver(std::shared_ptr<tree::GameTree> game_tree,
-             std::shared_ptr<ranges::PrivateCardsManager> pcm,
-             std::shared_ptr<ranges::RiverRangeManager> rrm,
-             const config::Rule& rule,
-             Config solver_config = Config());
+  CfrPlusSolver(std::shared_ptr<tree::GameTree> game_tree,
+                std::shared_ptr<ranges::PrivateHandManager> phm,
+                std::shared_ptr<ranges::RiverRangeManager> rrm,
+                const config::Rule& rule,
+                Config solver_config = Config());
 
   // Modern snake_case methods
   void train() override;
@@ -55,7 +55,7 @@ class PCfrSolver : public Solver {
   double compute_exploitability() const;
   json dump_strategy(bool dump_evs, int max_depth = -1, int max_chance_outcomes = -1) const override;
 
-  std::shared_ptr<ranges::PrivateCardsManager> get_private_cards_manager() const { return pcm_; }
+  std::shared_ptr<ranges::PrivateHandManager> get_private_hand_manager() const { return phm_; }
   std::shared_ptr<ranges::RiverRangeManager> get_river_range_manager() const { return rrm_; }
   uint64_t get_initial_board_mask() const { return initial_board_mask_; }
   size_t get_num_players() const { return num_players_; }
@@ -70,7 +70,7 @@ class PCfrSolver : public Solver {
   json DumpStrategy(bool dump_evs, int max_depth = -1, int max_chance_outcomes = -1) const {
     return dump_strategy(dump_evs, max_depth, max_chance_outcomes);
   }
-  std::shared_ptr<ranges::PrivateCardsManager> GetPrivateCardsManager() const { return get_private_cards_manager(); }
+  std::shared_ptr<ranges::PrivateHandManager> GetPrivateHandManager() const { return get_private_hand_manager(); }
   std::shared_ptr<ranges::RiverRangeManager> GetRiverRangeManager() const { return get_river_range_manager(); }
   uint64_t GetInitialBoardMask() const { return get_initial_board_mask(); }
   size_t GetNumPlayers() const { return get_num_players(); }
@@ -134,9 +134,9 @@ class PCfrSolver : public Solver {
       int max_chance_outcomes = -1) const;
 
   void preallocate_trainables(core::NodeRef node);
-  void exchange_color(double* utility, size_t num_hands, int player, int rank1, int rank2) const;
+  void exchange_suit(double* utility, size_t num_hands, int player, int suit1, int suit2) const;
 
-  std::shared_ptr<ranges::PrivateCardsManager> pcm_;
+  std::shared_ptr<ranges::PrivateHandManager> phm_;
   std::shared_ptr<ranges::RiverRangeManager> rrm_;
   uint64_t initial_board_mask_;
   core::Deck deck_; 
@@ -149,7 +149,7 @@ class PCfrSolver : public Solver {
   int completed_iterations_ = 0;
 };
 
-using PublicChanceCfrSolver = PCfrSolver;
+using PublicChanceCfrSolver = CfrPlusSolver;
 
 } // namespace solver
 } // namespace poker_solver

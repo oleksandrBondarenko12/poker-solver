@@ -15,38 +15,38 @@
 
 // Use namespaces
 using namespace poker_solver::core;
-using namespace poker_solver::utils; // For ExchangeColorIsomorphism
+using namespace poker_solver::utils; // For ExchangeSuitIsomorphism
 
 // Test fixture for Utils tests
 class UtilsTest : public ::testing::Test {
  protected:
   // Sample range including isomorphic hands when swapping clubs (0) and spades (3)
   // Also includes pairs for h(2)/d(1) swap.
-  std::vector<PrivateCards> test_range_;
+  std::vector<PrivateHand> test_range_;
   std::vector<double> test_values_;
 
   // Store original indices for verification
-  std::map<PrivateCards, size_t> original_indices_;
+  std::map<PrivateHand, size_t> original_indices_;
 
   void SetUp() override {
       try {
           test_range_ = {
-              PrivateCards(Card::StringToInt("Ac").value(), Card::StringToInt("Kc").value()), // 0: AcKc (c=0) -> iso AsKs (idx 1)
-              PrivateCards(Card::StringToInt("As").value(), Card::StringToInt("Ks").value()), // 1: AsKs (s=3) -> iso AcKc (idx 0)
-              PrivateCards(Card::StringToInt("Ac").value(), Card::StringToInt("Qc").value()), // 2: AcQc (c=0) -> iso AsQs (idx 3)
-              PrivateCards(Card::StringToInt("As").value(), Card::StringToInt("Qs").value()), // 3: AsQs (s=3) -> iso AcQc (idx 2)
-              PrivateCards(Card::StringToInt("Ks").value(), Card::StringToInt("Kd").value()), // 4: KsKd (s=3, d=1) -> iso KcKd (idx 5)
-              PrivateCards(Card::StringToInt("Kc").value(), Card::StringToInt("Kd").value()), // 5: KcKd (c=0, d=1) -> iso KsKd (idx 4)
-              PrivateCards(Card::StringToInt("Ah").value(), Card::StringToInt("Kh").value()), // 6: AhKh (h=2) -> iso AdKd (idx 13)
-              PrivateCards(Card::StringToInt("7d").value(), Card::StringToInt("6c").value()), // 7: 7d6c (d=1, c=0) -> iso 7d6s (idx 8)
-              PrivateCards(Card::StringToInt("7d").value(), Card::StringToInt("6s").value()), // 8: 7d6s (d=1, s=3) -> iso 7d6c (idx 7)
-              PrivateCards(Card::StringToInt("Kc").value(), Card::StringToInt("Kh").value()), // 9: KcKh (c=0, h=2) -> iso KsKh (idx 11)
-              PrivateCards(Card::StringToInt("Kd").value(), Card::StringToInt("Kh").value()), // 10: KdKh (d=1, h=2) -> no c/s swap
-              PrivateCards(Card::StringToInt("Kh").value(), Card::StringToInt("Ks").value()), // 11: KhKs (h=2, s=3) -> iso KhKc (idx 9)
-              PrivateCards(Card::StringToInt("Ac").value(), Card::StringToInt("Kc").value()), // 12: AcKc (Duplicate of 0, c=0) -> iso AsKs (idx 1)
-              PrivateCards(Card::StringToInt("Ad").value(), Card::StringToInt("Kd").value()), // 13: AdKd (d=1) -> iso AhKh (idx 6)
-              PrivateCards(Card::StringToInt("Ah").value(), Card::StringToInt("Kh").value()), // 14: AhKh (Duplicate of 6, h=2) -> iso AdKd (idx 13)
-              PrivateCards(Card::StringToInt("As").value(), Card::StringToInt("Ks").value())  // 15: AsKs (Duplicate of 1, s=3) -> iso AcKc (idx 0)
+              PrivateHand(Card::StringToInt("Ac").value(), Card::StringToInt("Kc").value()), // 0: AcKc (c=0) -> iso AsKs (idx 1)
+              PrivateHand(Card::StringToInt("As").value(), Card::StringToInt("Ks").value()), // 1: AsKs (s=3) -> iso AcKc (idx 0)
+              PrivateHand(Card::StringToInt("Ac").value(), Card::StringToInt("Qc").value()), // 2: AcQc (c=0) -> iso AsQs (idx 3)
+              PrivateHand(Card::StringToInt("As").value(), Card::StringToInt("Qs").value()), // 3: AsQs (s=3) -> iso AcQc (idx 2)
+              PrivateHand(Card::StringToInt("Ks").value(), Card::StringToInt("Kd").value()), // 4: KsKd (s=3, d=1) -> iso KcKd (idx 5)
+              PrivateHand(Card::StringToInt("Kc").value(), Card::StringToInt("Kd").value()), // 5: KcKd (c=0, d=1) -> iso KsKd (idx 4)
+              PrivateHand(Card::StringToInt("Ah").value(), Card::StringToInt("Kh").value()), // 6: AhKh (h=2) -> iso AdKd (idx 13)
+              PrivateHand(Card::StringToInt("7d").value(), Card::StringToInt("6c").value()), // 7: 7d6c (d=1, c=0) -> iso 7d6s (idx 8)
+              PrivateHand(Card::StringToInt("7d").value(), Card::StringToInt("6s").value()), // 8: 7d6s (d=1, s=3) -> iso 7d6c (idx 7)
+              PrivateHand(Card::StringToInt("Kc").value(), Card::StringToInt("Kh").value()), // 9: KcKh (c=0, h=2) -> iso KsKh (idx 11)
+              PrivateHand(Card::StringToInt("Kd").value(), Card::StringToInt("Kh").value()), // 10: KdKh (d=1, h=2) -> no c/s swap
+              PrivateHand(Card::StringToInt("Kh").value(), Card::StringToInt("Ks").value()), // 11: KhKs (h=2, s=3) -> iso KhKc (idx 9)
+              PrivateHand(Card::StringToInt("Ac").value(), Card::StringToInt("Kc").value()), // 12: AcKc (Duplicate of 0, c=0) -> iso AsKs (idx 1)
+              PrivateHand(Card::StringToInt("Ad").value(), Card::StringToInt("Kd").value()), // 13: AdKd (d=1) -> iso AhKh (idx 6)
+              PrivateHand(Card::StringToInt("Ah").value(), Card::StringToInt("Kh").value()), // 14: AhKh (Duplicate of 6, h=2) -> iso AdKd (idx 13)
+              PrivateHand(Card::StringToInt("As").value(), Card::StringToInt("Ks").value())  // 15: AsKs (Duplicate of 1, s=3) -> iso AcKc (idx 0)
           };
 
           // Assign simple values corresponding to original index
@@ -69,7 +69,7 @@ TEST_F(UtilsTest, ExchangeClubSpade) {
     int club_idx = Card::SuitCharToIndex('c'); // 0
     int spade_idx = Card::SuitCharToIndex('s'); // 3
     std::vector<double> original_values = test_values_;
-    ExchangeColorIsomorphism(test_values_, test_range_, club_idx, spade_idx);
+    ExchangeSuitIsomorphism(test_values_, test_range_, club_idx, spade_idx);
 
     // --- Debug Output (Optional) ---
     // std::cout << "[DEBUG UtilsTest] Final test_values_ for Club/Spade:" << std::endl;
@@ -109,7 +109,7 @@ TEST_F(UtilsTest, ExchangeClubSpade) {
 TEST_F(UtilsTest, ExchangeSameSuit) {
     int heart_idx = Card::SuitCharToIndex('h'); // 2
     std::vector<double> original_values = test_values_;
-    ExchangeColorIsomorphism(test_values_, test_range_, heart_idx, heart_idx);
+    ExchangeSuitIsomorphism(test_values_, test_range_, heart_idx, heart_idx);
     EXPECT_EQ(test_values_, original_values); // Vector should be unchanged
 }
 
@@ -119,7 +119,7 @@ TEST_F(UtilsTest, ExchangeHeartDiamond) {
     int diamond_idx = Card::SuitCharToIndex('d'); // 1
     std::vector<double> original_values = test_values_;
 
-    ExchangeColorIsomorphism(test_values_, test_range_, heart_idx, diamond_idx);
+    ExchangeSuitIsomorphism(test_values_, test_range_, heart_idx, diamond_idx);
 
     // Expected swaps based on corrected trace: 4<->11, 5<->9, 6<->13
     // Indices 10, 14 map to already swapped indices (4, 13) and should remain unchanged.
@@ -148,12 +148,12 @@ TEST_F(UtilsTest, ExchangeHeartDiamond) {
 // Test edge cases
 TEST_F(UtilsTest, EdgeCases) {
     std::vector<double> empty_values;
-    std::vector<PrivateCards> empty_range;
+    std::vector<PrivateHand> empty_range;
     int c = 0, s = 3;
-    EXPECT_NO_THROW(ExchangeColorIsomorphism(empty_values, empty_range, c, s));
+    EXPECT_NO_THROW(ExchangeSuitIsomorphism(empty_values, empty_range, c, s));
     std::vector<double> one_value = {1.0};
-    EXPECT_THROW(ExchangeColorIsomorphism(one_value, empty_range, c, s), std::invalid_argument);
-    EXPECT_THROW(ExchangeColorIsomorphism(empty_values, test_range_, c, s), std::invalid_argument);
-    EXPECT_THROW(ExchangeColorIsomorphism(test_values_, test_range_, -1, s), std::out_of_range);
-    EXPECT_THROW(ExchangeColorIsomorphism(test_values_, test_range_, c, 4), std::out_of_range);
+    EXPECT_THROW(ExchangeSuitIsomorphism(one_value, empty_range, c, s), std::invalid_argument);
+    EXPECT_THROW(ExchangeSuitIsomorphism(empty_values, test_range_, c, s), std::invalid_argument);
+    EXPECT_THROW(ExchangeSuitIsomorphism(test_values_, test_range_, -1, s), std::out_of_range);
+    EXPECT_THROW(ExchangeSuitIsomorphism(test_values_, test_range_, c, 4), std::out_of_range);
 }

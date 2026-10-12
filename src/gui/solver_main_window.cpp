@@ -16,7 +16,7 @@
 #include "poker_solver/ranges/range_syntax_parser.h"
 #include "poker_solver/ranges/range_distribution_manager.h"
 #include "poker_solver/ranges/river_evaluation_cache.h"
-#include "poker_solver/compairer/table_hand_evaluator.h"
+#include "poker_solver/evaluator/table_hand_evaluator.h"
 #include "poker_solver/tree/extensive_game_tree.h"
 #include "poker_solver/core/poker_card.h"
 #include "poker_solver/solver/public_chance_cfr_solver.h"
@@ -376,11 +376,11 @@ void MainWindow::copyIPtoOOP() {
 }
 
 void MainWindow::buildTree() {
-    appendToLog("Loading holdem compairing file");
-    appendToLog("Loading shortdeck compairing file");
-    appendToLog("Loading finished. Good to go.");
-    appendToLog("building tree...");
-    appendToLog("build tree finished");
+    appendToLog("Loading Hold'em hand evaluation table...");
+    appendToLog("Loading Short Deck hand evaluation table...");
+    appendToLog("Hand evaluation tables loaded successfully.");
+    appendToLog("Building game tree...");
+    appendToLog("Game tree built successfully.");
 }
 MainWindow::~MainWindow() {
     stopSolving();
@@ -456,11 +456,11 @@ void MainWindow::startSolving() {
         poker_solver::config::Rule rule = create_rule_from_json(j["game_rule"], deck);
         uint64_t initial_board_mask = poker_solver::core::Card::CardIntsToUint64(initial_board_ints);
         
-        std::vector<poker_solver::core::PrivateCards> ip_range = 
-            poker_solver::ranges::PrivateRangeConverter::StringToPrivateCards(
+        std::vector<poker_solver::core::PrivateHand> ip_range = 
+            poker_solver::ranges::PrivateRangeConverter::StringToPrivateHands(
                 j["player_ranges"]["ip"].get<std::string>(), initial_board_ints);
-        std::vector<poker_solver::core::PrivateCards> oop_range = 
-            poker_solver::ranges::PrivateRangeConverter::StringToPrivateCards(
+        std::vector<poker_solver::core::PrivateHand> oop_range = 
+            poker_solver::ranges::PrivateRangeConverter::StringToPrivateHands(
                 j["player_ranges"]["oop"].get<std::string>(), initial_board_ints);
         QString dictPath = "five_card_strength.txt";
         QString appDir = QCoreApplication::applicationDirPath();
@@ -471,15 +471,15 @@ void MainWindow::startSolving() {
         } else if (QFile::exists("build/five_card_strength.txt")) {
             dictPath = "build/five_card_strength.txt";
         }
-        auto compairer_ = std::make_shared<poker_solver::eval::Dic5Compairer>(dictPath.toStdString());
-        auto pcm = std::make_shared<poker_solver::ranges::PrivateCardsManager>(
-            std::vector<std::vector<poker_solver::core::PrivateCards>>{ip_range, oop_range},
+        auto evaluator = std::make_shared<poker_solver::eval::TableHandEvaluator>(dictPath.toStdString());
+        auto phm = std::make_shared<poker_solver::ranges::PrivateHandManager>(
+            std::vector<std::vector<poker_solver::core::PrivateHand>>{ip_range, oop_range},
             initial_board_mask
         );
-        auto rrm = std::make_shared<poker_solver::ranges::RiverRangeManager>(compairer_);
+        auto rrm = std::make_shared<poker_solver::ranges::RiverRangeManager>(evaluator);
         auto game_tree = std::make_shared<poker_solver::tree::GameTree>(rule);
         
-        poker_solver::solver::PCfrSolver::Config config;
+        poker_solver::solver::CfrPlusSolver::Config config;
         config.iteration_limit = iterationsInput->text().toInt();
         if (config.iteration_limit <= 0) config.iteration_limit = 1000;
         config.num_threads = threadsInput->text().toInt();
@@ -502,7 +502,7 @@ void MainWindow::startSolving() {
             }, Qt::QueuedConnection);
         };
         
-        auto solver = std::make_shared<poker_solver::solver::PCfrSolver>(game_tree, pcm, rrm, rule, config);
+        auto solver = std::make_shared<poker_solver::solver::CfrPlusSolver>(game_tree, phm, rrm, rule, config);
         
         solverThread_ = new QThread(this);
         solverThread_->setStackSize(8 * 1024 * 1024); // 8 MB stack for CFR recursion

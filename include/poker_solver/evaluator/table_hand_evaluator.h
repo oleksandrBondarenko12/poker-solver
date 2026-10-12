@@ -3,7 +3,7 @@
 
 #include "poker_solver/core/poker_card.h"
 #include "poker_solver/core/solver_math_utils.h"
-#include "poker_solver/compairer/hand_strength_evaluator.h"
+#include "poker_solver/evaluator/hand_strength_evaluator.h"
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -13,9 +13,9 @@
 namespace poker_solver {
 namespace eval {
 
-// Concrete implementation of Compairer using a pre-computed dictionary
+// Concrete implementation of HandStrengthEvaluator using a pre-computed dictionary
 // of 5-card hand ranks loaded from a file (with binary caching).
-class Dic5Compairer : public core::Compairer {
+class TableHandEvaluator : public core::HandStrengthEvaluator {
  public:
   static constexpr int kInvalidRank = 999999;
 
@@ -26,7 +26,7 @@ class Dic5Compairer : public core::Compairer {
   static uint64_t RanksHash(uint64_t cards_mask) { return ranks_hash(cards_mask); }
   static bool IsFlush(uint64_t cards_mask) { return is_flush(cards_mask); }
 
-  explicit Dic5Compairer(const std::string& dictionary_filepath);
+  explicit TableHandEvaluator(const std::string& dictionary_filepath);
 
   // Modern snake_case interface
   core::ComparisonResult compare_hands(const std::vector<int>& private_hand1,
@@ -56,8 +56,6 @@ class Dic5Compairer : public core::Compairer {
   std::filesystem::path dictionary_path_;
   std::filesystem::path cache_path_;
 };
-
-using TableHandEvaluator = Dic5Compairer;
 
 } // namespace eval
 } // namespace poker_solver

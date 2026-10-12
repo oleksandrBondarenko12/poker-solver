@@ -16,7 +16,7 @@
 #include <QThread>
 #include <QPointer>
 #include "solver_background_worker.h"
-#include "poker_solver/json.hpp"
+#include <nlohmann/json.hpp>
 
 struct StreetControls {
     QLineEdit *betSizes;
