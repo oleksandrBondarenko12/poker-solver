@@ -58,6 +58,8 @@ const std::vector<EvaluatedRiverCombo> &RiverRangeManager::get_river_combos(
     const std::vector<core::PrivateHand> &initial_player_range,
     uint64_t river_board_mask) {
 
+  river_board_mask &= 0x000FFFFFFFFFFFFFULL;
+
   // Select the appropriate cache based on player index
   auto &cache = (player_index == 0) ? tl_player_0_cache : tl_player_1_cache;
 

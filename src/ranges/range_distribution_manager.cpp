@@ -188,6 +188,96 @@ void PrivateHandManager::calculate_initial_reach_probs() {
     }
     // ***************************
   }
+
+  valid_deal_mass_ = calculate_valid_deal_mass(initial_reach_probs_);
+  for (int s1 = 0; s1 < 4; ++s1) {
+    for (int s2 = 0; s2 < 4; ++s2) {
+      suit_pair_symmetric_[s1][s2] = compute_suit_pair_symmetry(s1, s2);
+    }
+  }
+}
+
+double PrivateHandManager::calculate_valid_deal_mass(
+    const std::vector<std::vector<double>> &reach_probs) const {
+  if (num_players_ != 2 || reach_probs.size() < 2)
+    return 1.0;
+
+  const auto &range_0 = player_ranges_[0];
+  const auto &range_1 = player_ranges_[1];
+  double p1_sum = 0.0;
+  std::array<double, 52> p1_card_sum{};
+  for (size_t h1 = 0; h1 < range_1.size(); ++h1) {
+    if (core::Card::DoBoardsOverlap(range_1[h1].GetBoardMask(), initial_board_mask_))
+      continue;
+    double prob1 = (h1 < reach_probs[1].size()) ? reach_probs[1][h1] : 0.0;
+    p1_sum += prob1;
+    p1_card_sum[range_1[h1].Card1Int()] += prob1;
+    p1_card_sum[range_1[h1].Card2Int()] += prob1;
+  }
+
+  double valid_deal_mass = 0.0;
+  for (size_t h0 = 0; h0 < range_0.size(); ++h0) {
+    if (core::Card::DoBoardsOverlap(range_0[h0].GetBoardMask(), initial_board_mask_))
+      continue;
+    auto oppo_idx = get_opponent_hand_index(0, 1, h0);
+    double same_hand_prob =
+        (oppo_idx && *oppo_idx < reach_probs[1].size()) ? reach_probs[1][*oppo_idx] : 0.0;
+    double compat_p1 = p1_sum - p1_card_sum[range_0[h0].Card1Int()] -
+                       p1_card_sum[range_0[h0].Card2Int()] + same_hand_prob;
+    double prob0 = (h0 < reach_probs[0].size()) ? reach_probs[0][h0] : 0.0;
+    valid_deal_mass += prob0 * compat_p1;
+  }
+
+  return valid_deal_mass;
+}
+
+bool PrivateHandManager::compute_suit_pair_symmetry(int suit1, int suit2) const {
+  if (suit1 == suit2)
+    return true;
+  if (num_players_ != 2)
+    return false;
+
+  for (size_t p = 0; p < num_players_; ++p) {
+    const auto &range = player_ranges_[p];
+    const auto &probs = initial_reach_probs_[p];
+    if (range.size() != probs.size())
+      return false;
+
+    std::vector<double> hand_probs(52 * 52, -1.0);
+    for (size_t i = 0; i < range.size(); ++i) {
+      int c1 = range[i].Card1Int();
+      int c2 = range[i].Card2Int();
+      if (c1 > c2)
+        std::swap(c1, c2);
+      hand_probs[c1 * 52 + c2] = probs[i];
+    }
+
+    for (size_t i = 0; i < range.size(); ++i) {
+      int c1 = range[i].Card1Int();
+      int c2 = range[i].Card2Int();
+      int s1 = c1 % 4, r1 = c1 / 4;
+      int s2 = c2 % 4, r2 = c2 / 4;
+      if (s1 == suit1)
+        s1 = suit2;
+      else if (s1 == suit2)
+        s1 = suit1;
+      if (s2 == suit1)
+        s2 = suit2;
+      else if (s2 == suit2)
+        s2 = suit1;
+
+      int mc1 = r1 * 4 + s1;
+      int mc2 = r2 * 4 + s2;
+      if (mc1 > mc2)
+        std::swap(mc1, mc2);
+
+      double partner_prob = hand_probs[mc1 * 52 + mc2];
+      if (partner_prob < 0.0 || std::abs(partner_prob - probs[i]) > 1e-7) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 const std::vector<double> &

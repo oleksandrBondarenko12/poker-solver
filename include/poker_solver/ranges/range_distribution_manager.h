@@ -3,6 +3,7 @@
 
 #include "poker_solver/ranges/hole_card_combination.h"
 #include "poker_solver/core/poker_card.h"
+#include <array>
 #include <vector>
 #include <cstdint>
 #include <unordered_map>
@@ -46,14 +47,36 @@ class PrivateHandManager {
     set_relative_probs(initial_board_mask);
   }
 
+  bool is_suit_pair_symmetric(int suit1, int suit2) const {
+    if (suit1 == suit2) return true;
+    if (suit1 < 0 || suit1 >= 4 || suit2 < 0 || suit2 >= 4) return false;
+    return suit_pair_symmetric_[suit1][suit2];
+  }
+  bool IsSuitPairSymmetric(int suit1, int suit2) const {
+    return is_suit_pair_symmetric(suit1, suit2);
+  }
+
+  double calculate_valid_deal_mass(
+      const std::vector<std::vector<double>> &reach_probs) const;
+  double CalculateValidDealMass(
+      const std::vector<std::vector<double>> &reach_probs) const {
+    return calculate_valid_deal_mass(reach_probs);
+  }
+
+  double get_valid_deal_mass() const { return valid_deal_mass_; }
+  double GetValidDealMass() const { return get_valid_deal_mass(); }
+
  private:
   void calculate_initial_reach_probs();
+  bool compute_suit_pair_symmetry(int suit1, int suit2) const;
 
   size_t num_players_;
   uint64_t initial_board_mask_;
   std::vector<std::vector<core::PrivateHand>> player_ranges_;
   std::unordered_map<std::size_t, std::vector<std::optional<size_t>>> hand_hash_to_indices_;
   std::vector<std::vector<double>> initial_reach_probs_;
+  double valid_deal_mass_ = 1.0;
+  std::array<std::array<bool, 4>, 4> suit_pair_symmetric_{};
 };
 
 using RangeDistributionManager = PrivateHandManager;

@@ -236,3 +236,53 @@ TEST_F(PrivateHandManagerTest, GetInitialReachProbsWithBoard) {
     EXPECT_NEAR(total_prob_p0, 1.0, 1e-9) << "P0 probabilities do not sum to 1.0";
     EXPECT_NEAR(total_prob_p1, 1.0, 1e-9) << "P1 probabilities do not sum to 1.0";
 }
+
+TEST_F(PrivateHandManagerTest, ValidDealMassCalculation) {
+    // 1. Both players hold only AA (6 combos each, each combo is compatible with exactly 1 opponent combo)
+    int ac = Card::StringToInt("Ac").value(), ad = Card::StringToInt("Ad").value();
+    int ah = Card::StringToInt("Ah").value(), as = Card::StringToInt("As").value();
+    std::vector<PrivateHand> aa_range;
+    aa_range.emplace_back(ac, ad); aa_range.emplace_back(ac, ah); aa_range.emplace_back(ac, as);
+    aa_range.emplace_back(ad, ah); aa_range.emplace_back(ad, as); aa_range.emplace_back(ah, as);
+
+    PrivateHandManager phm_aa({aa_range, aa_range}, 0ULL);
+    // True Z = 6 * (1/6) * (1/6) = 1/6
+    EXPECT_NEAR(phm_aa.GetValidDealMass(), 1.0 / 6.0, 1e-9);
+
+    // 2. Disjoint ranges: P0 has AA, P1 has KK -> Z = 1.0
+    int kc = Card::StringToInt("Kc").value(), kd = Card::StringToInt("Kd").value();
+    int kh = Card::StringToInt("Kh").value(), ks = Card::StringToInt("Ks").value();
+    std::vector<PrivateHand> kk_range;
+    kk_range.emplace_back(kc, kd); kk_range.emplace_back(kc, kh); kk_range.emplace_back(kc, ks);
+    kk_range.emplace_back(kd, kh); kk_range.emplace_back(kd, ks); kk_range.emplace_back(kh, ks);
+
+    PrivateHandManager phm_disjoint({aa_range, kk_range}, 0ULL);
+    EXPECT_NEAR(phm_disjoint.GetValidDealMass(), 1.0, 1e-9);
+}
+
+TEST_F(PrivateHandManagerTest, SuitPairSymmetry) {
+    // Full symmetric AA range
+    int ac = Card::StringToInt("Ac").value(), ad = Card::StringToInt("Ad").value();
+    int ah = Card::StringToInt("Ah").value(), as = Card::StringToInt("As").value();
+    std::vector<PrivateHand> aa_range;
+    aa_range.emplace_back(ac, ad); aa_range.emplace_back(ac, ah); aa_range.emplace_back(ac, as);
+    aa_range.emplace_back(ad, ah); aa_range.emplace_back(ad, as); aa_range.emplace_back(ah, as);
+
+    PrivateHandManager phm_sym({aa_range, aa_range}, 0ULL);
+    for (int s1 = 0; s1 < 4; ++s1) {
+        for (int s2 = 0; s2 < 4; ++s2) {
+            EXPECT_TRUE(phm_sym.IsSuitPairSymmetric(s1, s2));
+        }
+    }
+
+    // Add asymmetric combo (AdKd without AcKc) to P0
+    int kd = Card::StringToInt("Kd").value();
+    std::vector<PrivateHand> asym_range = aa_range;
+    asym_range.emplace_back(ad, kd);
+
+    PrivateHandManager phm_asym({asym_range, aa_range}, 0ULL);
+    // Diamonds (suit 1) and Clubs (suit 0) are NOT symmetric
+    EXPECT_FALSE(phm_asym.IsSuitPairSymmetric(0, 1));
+    EXPECT_FALSE(phm_asym.IsSuitPairSymmetric(1, 0));
+}
+

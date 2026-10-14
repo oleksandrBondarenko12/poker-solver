@@ -135,6 +135,8 @@ std::vector<double> CfrPlusSolver::compute_ev() {
   for (size_t p = 0; p < num_players_; ++p)
     initial_reach_probs[p] = phm_->GetInitialReachProbs(p);
 
+  double valid_deal_mass = phm_->CalculateValidDealMass(initial_reach_probs);
+
   std::vector<double> results(num_players_, 0.0);
   for (int traverser = 0; traverser < static_cast<int>(num_players_);
        ++traverser) {
@@ -146,6 +148,9 @@ std::vector<double> CfrPlusSolver::compute_ev() {
     double unnormalized_ev = 0.0;
     for (size_t i = 0; i < phm_->GetPlayerRange(traverser).size(); ++i) {
       unnormalized_ev += initial_reach_probs[traverser][i] * evs[i];
+    }
+    if (valid_deal_mass > 1e-12) {
+      unnormalized_ev /= valid_deal_mass;
     }
     results[traverser] = unnormalized_ev;
   }
@@ -288,8 +293,22 @@ json CfrPlusSolver::dump_strategy_recursive(core::NodeRef node, bool dump_evs,
               available_card_indices.push_back(i);
             }
           }
+          std::array<int, 4> initial_iso =
+              utils::FlopIsomorphism::GetSuitIsoOffset(initial_board_mask_);
           std::array<int, 4> current_iso_offset =
               utils::FlopIsomorphism::GetSuitIsoOffset(current_board_mask);
+          for (int s = 0; s < 4; ++s) {
+            if (current_iso_offset[s] < 0) {
+              int canon = s + current_iso_offset[s];
+              int initial_canon = (initial_iso[s] < 0) ? (s + initial_iso[s]) : s;
+              int initial_canon_target =
+                  (initial_iso[canon] < 0) ? (canon + initial_iso[canon]) : canon;
+              if (initial_canon != initial_canon_target ||
+                  !phm_->IsSuitPairSymmetric(canon, s)) {
+                current_iso_offset[s] = 0;
+              }
+            }
+          }
 
           // Group available canonical cards by rank (12 down to 0: Ace down to 2)
           std::vector<std::vector<int>> canonical_cards_by_rank(13);
@@ -336,7 +355,18 @@ json CfrPlusSolver::dump_strategy_recursive(core::NodeRef node, bool dump_evs,
 
           for (int card_int : deals_to_dump) {
             uint64_t outcome_board_mask = 1ULL << card_int;
-            uint64_t next_board_mask = current_board_mask | outcome_board_mask;
+            uint64_t next_board_mask;
+            if (round_after_chance == core::GameRound::kTurn) {
+              next_board_mask = (current_board_mask & 0x000FFFFFFFFFFFFFULL) |
+                                outcome_board_mask |
+                                (static_cast<uint64_t>(card_int + 1) << 52);
+            } else if (round_after_chance == core::GameRound::kRiver) {
+              uint64_t turn_card_bits = current_board_mask & (0x3FULL << 52);
+              next_board_mask = (current_board_mask & 0x000FFFFFFFFFFFFFULL) |
+                                outcome_board_mask | turn_card_bits;
+            } else {
+              next_board_mask = current_board_mask | outcome_board_mask;
+            }
             json child_obj = json::object();
             child_obj["action"] = "deal:" + core::Card::IntToString(card_int);
             child_obj["node"] = dump_strategy_recursive(
@@ -564,8 +594,8 @@ void CfrPlusSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs
                                             outcome_board_mask)) {
               next_reach[h] = 0.0;
             } else {
-              // Normalized by total number of flops (22,100)
-              next_reach[h] = current_reach[h] / 22100.0;
+              // Normalized by valid non-overlapping flops C(52-4, 3) = C(48, 3) = 17,296
+              next_reach[h] = current_reach[h] / 17296.0;
             }
             current_reach_sum += next_reach[h];
           }
@@ -621,9 +651,23 @@ void CfrPlusSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs
       return;
 
     static bool no_turn_iso = (std::getenv("NO_TURN_ISO") != nullptr);
+    std::array<int, 4> initial_iso =
+        utils::FlopIsomorphism::GetSuitIsoOffset(initial_board_mask_);
     std::array<int, 4> current_iso_offset =
         no_turn_iso ? std::array<int, 4>{0, 0, 0, 0}
                     : utils::FlopIsomorphism::GetSuitIsoOffset(current_board_mask);
+    for (int s = 0; s < 4; ++s) {
+      if (current_iso_offset[s] < 0) {
+        int canon = s + current_iso_offset[s];
+        int initial_canon = (initial_iso[s] < 0) ? (s + initial_iso[s]) : s;
+        int initial_canon_target =
+            (initial_iso[canon] < 0) ? (canon + initial_iso[canon]) : canon;
+        if (initial_canon != initial_canon_target ||
+            !phm_->IsSuitPairSymmetric(canon, s)) {
+          current_iso_offset[s] = 0;
+        }
+      }
+    }
 
     std::vector<int> valid_cards;
     valid_cards.reserve(outcomes.size());
@@ -648,7 +692,18 @@ void CfrPlusSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs
         int i = valid_cards[valid_ind];
         int card_int = outcomes[i][0];
         uint64_t outcome_board_mask = core::Card::CardIntsToUint64(outcomes[i]);
-        uint64_t next_board_mask = current_board_mask | outcome_board_mask;
+        uint64_t next_board_mask;
+        if (round_after_chance == core::GameRound::kTurn) {
+          next_board_mask = (current_board_mask & 0x000FFFFFFFFFFFFFULL) |
+                            outcome_board_mask |
+                            (static_cast<uint64_t>(card_int + 1) << 52);
+        } else if (round_after_chance == core::GameRound::kRiver) {
+          uint64_t turn_card_bits = current_board_mask & (0x3FULL << 52);
+          next_board_mask = (current_board_mask & 0x000FFFFFFFFFFFFFULL) |
+                            outcome_board_mask | turn_card_bits;
+        } else {
+          next_board_mask = current_board_mask | outcome_board_mask;
+        }
 
         double next_reach_0[kMaxHands];
         double next_reach_1[kMaxHands];

@@ -7,7 +7,7 @@ namespace poker_solver {
 namespace utils {
 
 void FlopIsomorphism::get_suit_mapping(uint64_t board_mask, int* out_mapping) {
-    auto card_ints = core::Card::Uint64ToCardInts(board_mask);
+    auto card_ints = core::Card::Uint64ToCardInts(board_mask & 0x000FFFFFFFFFFFFFULL);
     if (card_ints.size() != 3) {
         for (int i = 0; i < 4; ++i) out_mapping[i] = i;
         return;
@@ -37,7 +37,7 @@ void FlopIsomorphism::get_suit_mapping(uint64_t board_mask, int* out_mapping) {
 
 std::array<int, 4> FlopIsomorphism::get_suit_iso_offset(uint64_t board_mask) {
     uint16_t suit_hash[4] = {0, 0, 0, 0};
-    uint64_t temp = board_mask;
+    uint64_t temp = board_mask & 0x000FFFFFFFFFFFFFULL;
     int c = 0;
     while (temp) {
         if (temp & 1) {
@@ -62,9 +62,10 @@ std::array<int, 4> FlopIsomorphism::get_suit_iso_offset(uint64_t board_mask) {
 }
 
 uint64_t FlopIsomorphism::get_canonical_board(uint64_t board_mask) {
-    auto card_ints = core::Card::Uint64ToCardInts(board_mask);
+    uint64_t clean_mask = board_mask & 0x000FFFFFFFFFFFFFULL;
+    auto card_ints = core::Card::Uint64ToCardInts(clean_mask);
     if (card_ints.size() != 3) {
-        return board_mask;
+        return clean_mask;
     }
     std::array<int, 3> best_tuple = {-1, -1, -1};
     uint64_t best_mask = board_mask;

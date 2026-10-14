@@ -183,6 +183,7 @@ uint64_t Card::cards_to_uint64(const std::vector<Card>& cards) {
 }
 
 std::vector<int> Card::uint64_to_card_ints(uint64_t board_mask) {
+    board_mask &= 0x000FFFFFFFFFFFFFULL;
     std::vector<int> card_ints;
     while (board_mask > 0) {
         int card_int = std::countr_zero(board_mask);
@@ -203,7 +204,7 @@ std::vector<Card> Card::uint64_to_cards(uint64_t board_mask) {
 }
 
 bool Card::do_boards_overlap(uint64_t board_mask1, uint64_t board_mask2) {
-    return (board_mask1 & board_mask2) != 0;
+    return ((board_mask1 & board_mask2 & 0x000FFFFFFFFFFFFFULL) != 0);
 }
 
 } // namespace core
