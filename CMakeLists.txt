@@ -48,8 +48,15 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets Gui Core)
 # CMAKE_AUTORCC: Enables automatic resource code generation from .qrc files.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fsanitize=address")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -fsanitize=address")
+
+option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
+if(ENABLE_ASAN)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fsanitize=address")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -fsanitize=address")
+else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
+endif()
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
@@ -159,7 +166,7 @@ target_link_libraries(poker_solver_ui PRIVATE
     Qt6::Core
     PokerSolverCore # Link against your core logic
 )
-target_link_options(poker_solver_ui PRIVATE "-F/tmp/dummy_frameworks")
+target_link_options(poker_solver_ui PRIVATE "-F/tmp/dummy_frameworks" "-Wl,-rpath,/tmp/dummy_frameworks")
 # ++++++++++++++++++++++++++++++
 
 
@@ -265,4 +272,4 @@ target_link_libraries(test_explorer
     Qt6::Core
     Qt6::Gui
 )
-target_link_options(test_explorer PRIVATE "-F/tmp/dummy_frameworks")
+target_link_options(test_explorer PRIVATE "-F/tmp/dummy_frameworks" "-Wl,-rpath,/tmp/dummy_frameworks")

@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
 #include "poker_solver/core/suit_permutation_utils.h"        // Adjust path if needed
+#include "poker_solver/core/solver_math_utils.h"
 #include "poker_solver/ranges/hole_card_combination.h" // Adjust path if needed
 #include "poker_solver/core/poker_card.h"          // Adjust path if needed
 #include <vector>
@@ -156,4 +157,14 @@ TEST_F(UtilsTest, EdgeCases) {
     EXPECT_THROW(ExchangeSuitIsomorphism(empty_values, test_range_, c, s), std::invalid_argument);
     EXPECT_THROW(ExchangeSuitIsomorphism(test_values_, test_range_, -1, s), std::out_of_range);
     EXPECT_THROW(ExchangeSuitIsomorphism(test_values_, test_range_, c, 4), std::out_of_range);
+}
+
+TEST(CombinationsTest, CalculateCombinationsCount) {
+    EXPECT_EQ(Combinations<int>::CalculateCombinationsCount(4, 2), 6ULL);
+    EXPECT_EQ(Combinations<int>::CalculateCombinationsCount(52, 2), 1326ULL);
+    EXPECT_EQ(Combinations<int>::CalculateCombinationsCount(48, 3), 17296ULL);
+    EXPECT_EQ(Combinations<int>::CalculateCombinationsCount(10, 3), 120ULL);
+    EXPECT_EQ(Combinations<int>::CalculateCombinationsCount(5, 0), 1ULL);
+    EXPECT_EQ(Combinations<int>::CalculateCombinationsCount(5, 5), 1ULL);
+    EXPECT_EQ(Combinations<int>::CalculateCombinationsCount(3, 5), 0ULL);
 }

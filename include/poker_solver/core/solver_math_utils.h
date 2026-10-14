@@ -96,6 +96,7 @@ class Combinations {
   }
 
 
+ public:
   // Calculates binomial coefficient C(n, k) = n! / (k! * (n-k)!).
   // Uses the multiplicative formula C(n, k) = (n * (n-1) * ... * (n-k+1)) / k!
   // This implementation avoids large intermediate factorials but assumes
@@ -124,7 +125,7 @@ class Combinations {
              throw std::overflow_error(
                 "Overflow detected in CalculateCombinationsCount");
         }
-        result *= (n - i + 1) / i; // Perform division at each step
+        result = (result * (n - i + 1)) / i; // Perform multiplication before division to avoid truncation
     }
     return result;
   }

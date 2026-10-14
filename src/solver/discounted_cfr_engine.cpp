@@ -135,12 +135,12 @@ void DiscountedCfrTrainable::UpdateRegrets(const std::vector<double>& weighted_r
     double beta = 0.5;
 
     for (size_t i = 0; i < total_size; ++i) {
-      cumulative_regrets_[i] += weighted_regrets[i];
       if (cumulative_regrets_[i] > 0.0) {
         cumulative_regrets_[i] *= alpha_coef;
       } else {
         cumulative_regrets_[i] *= beta;
       }
+      cumulative_regrets_[i] += weighted_regrets[i];
     }
   } else {
     for (size_t i = 0; i < total_size; ++i) {
@@ -173,11 +173,14 @@ void DiscountedCfrTrainable::AccumulateAverageStrategy(
   static bool use_dcfr = (std::getenv("USE_DCFR") != nullptr);
   if (use_dcfr) {
     double t = static_cast<double>(iteration);
-    double theta = 0.9;
-    double strategy_coef = std::pow(t / (t + 1.0), 2.0);
+    double strategy_discount = std::pow(t / (t + 1.0), 2.0);
 
-    for (size_t i = 0; i < total_size; ++i) {
-      cumulative_strategy_sum_[i] = cumulative_strategy_sum_[i] * theta + current_strategy[i] * strategy_coef;
+    for (size_t h = 0; h < num_hands_; ++h) {
+      double reach_weight = (reach_probs[h] > 0.0) ? reach_probs[h] : 0.0;
+      for (size_t a = 0; a < num_actions_; ++a) {
+        size_t i = h * num_actions_ + a;
+        cumulative_strategy_sum_[i] = cumulative_strategy_sum_[i] * strategy_discount + reach_weight * current_strategy[i];
+      }
     }
   } else {
     // Linear weighting with actor reach probability for CFR+

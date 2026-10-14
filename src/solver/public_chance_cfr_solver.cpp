@@ -293,8 +293,14 @@ json CfrPlusSolver::dump_strategy_recursive(core::NodeRef node, bool dump_evs,
               available_card_indices.push_back(i);
             }
           }
+          uint64_t turn_card_code = (current_board_mask >> 52) & 0x3FULL;
+          uint64_t prior_street_mask =
+              (turn_card_code > 0)
+                  ? ((current_board_mask & 0x000FFFFFFFFFFFFFULL) &
+                     ~(1ULL << (turn_card_code - 1)))
+                  : initial_board_mask_;
           std::array<int, 4> initial_iso =
-              utils::FlopIsomorphism::GetSuitIsoOffset(initial_board_mask_);
+              utils::FlopIsomorphism::GetSuitIsoOffset(prior_street_mask);
           std::array<int, 4> current_iso_offset =
               utils::FlopIsomorphism::GetSuitIsoOffset(current_board_mask);
           for (int s = 0; s < 4; ++s) {
@@ -512,10 +518,44 @@ void CfrPlusSolver::cfr_action_node(uint32_t node_idx, const double *reach_probs
                                            iteration);
       trainable->UpdateRegrets(weighted_regrets, iteration);
     } else {
+      int opponent_player = 1 - acting_player;
+      const auto &acting_range = phm_->GetPlayerRange(acting_player);
+      const auto &oppo_range = phm_->GetPlayerRange(opponent_player);
+      const double *oppo_reach =
+          (acting_player == 0) ? reach_probs_1 : reach_probs_0;
+
+      double oppo_sum = 0.0;
+      std::array<double, 52> oppo_card_sum{};
+      for (size_t oh = 0; oh < oppo_range.size(); ++oh) {
+        if (core::Card::DoBoardsOverlap(oppo_range[oh].GetBoardMask(),
+                                        current_board_mask))
+          continue;
+        double p = oppo_reach[oh];
+        oppo_sum += p;
+        oppo_card_sum[oppo_range[oh].Card1Int()] += p;
+        oppo_card_sum[oppo_range[oh].Card2Int()] += p;
+      }
+
       std::vector<double> evs(num_actions * acting_player_num_hands);
       for (size_t h = 0; h < acting_player_num_hands; ++h) {
+        if (core::Card::DoBoardsOverlap(acting_range[h].GetBoardMask(),
+                                        current_board_mask)) {
+          for (size_t a = 0; a < num_actions; ++a) {
+            evs[h * num_actions + a] = 0.0;
+          }
+          continue;
+        }
+        auto oppo_idx_opt =
+            phm_->GetOpponentHandIndex(acting_player, opponent_player, h);
+        double same_prob = (oppo_idx_opt) ? oppo_reach[*oppo_idx_opt] : 0.0;
+        double compat_oppo_reach = oppo_sum -
+                                   oppo_card_sum[acting_range[h].Card1Int()] -
+                                   oppo_card_sum[acting_range[h].Card2Int()] +
+                                   same_prob;
+
+        double divisor = (compat_oppo_reach > 1e-12) ? compat_oppo_reach : 1.0;
         for (size_t a = 0; a < num_actions; ++a) {
-          evs[h * num_actions + a] = child_utilities[a][h];
+          evs[h * num_actions + a] = child_utilities[a][h] / divisor;
         }
       }
       trainable->SetEv(evs);
@@ -651,8 +691,14 @@ void CfrPlusSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs
       return;
 
     static bool no_turn_iso = (std::getenv("NO_TURN_ISO") != nullptr);
+    uint64_t turn_card_code = (current_board_mask >> 52) & 0x3FULL;
+    uint64_t prior_street_mask =
+        (turn_card_code > 0)
+            ? ((current_board_mask & 0x000FFFFFFFFFFFFFULL) &
+               ~(1ULL << (turn_card_code - 1)))
+            : initial_board_mask_;
     std::array<int, 4> initial_iso =
-        utils::FlopIsomorphism::GetSuitIsoOffset(initial_board_mask_);
+        utils::FlopIsomorphism::GetSuitIsoOffset(prior_street_mask);
     std::array<int, 4> current_iso_offset =
         no_turn_iso ? std::array<int, 4>{0, 0, 0, 0}
                     : utils::FlopIsomorphism::GetSuitIsoOffset(current_board_mask);

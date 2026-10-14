@@ -3,6 +3,7 @@
 #include "poker_solver/evaluator/table_hand_evaluator.h"  // For kInvalidRank
 
 #include <algorithm> // For std::sort
+#include <atomic>
 #include <bit>       // For std::popcount (C++20) - include if using
 #include <iostream>  // For std::cout, std::cerr
 #include <sstream>
@@ -16,8 +17,6 @@ namespace eval = poker_solver::eval; // For kInvalidRank
 
 namespace poker_solver {
 namespace ranges {
-
-#include <atomic>
 
 namespace {
 static std::atomic<uint64_t> g_rrm_instance_counter{1};
