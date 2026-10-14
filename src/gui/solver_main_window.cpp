@@ -36,6 +36,8 @@ const QString MainWindow::inputStyle =
     "}";
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
+    ipRange_ = "AA,KK,QQ,JJ,TT,99,88,AKs,AQs,AJs,ATs,KQs,KJs,AKo,AQo";
+    oopRange_ = "AA,KK,QQ,JJ,TT,99,88,77,66,AKs,AQs,KQs,QJs,JTs,T9s,AKo,AQo";
     setupUI();
     applyStyles();
 }
@@ -74,8 +76,8 @@ void MainWindow::setupUI() {
 
     QHBoxLayout *rangeLayout = new QHBoxLayout();
     rangeLayout->setSpacing(12);
-    selectIPButton = new QPushButton("Select IP");
-    selectOOPButton = new QPushButton("Select OOP");
+    selectIPButton = new QPushButton(QString("IP Range (%1 combos)").arg(ipRange_.split(',', Qt::SkipEmptyParts).size()));
+    selectOOPButton = new QPushButton(QString("OOP Range (%1 combos)").arg(oopRange_.split(',', Qt::SkipEmptyParts).size()));
     selectIPButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     selectOOPButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     QString buttonStyle = "QPushButton {"
@@ -350,14 +352,95 @@ void MainWindow::showBoardSelector() {
     }
 }
 
+poker_solver::config::Rule MainWindow::buildRuleFromUI(const std::vector<int>& initial_board_ints) {
+    poker_solver::core::Deck deck;
+
+    double pot = potInput->text().trimmed().toDouble();
+    if (pot <= 0.0) pot = 50.0;
+    double initial_oop_commit = pot / 2.0;
+    double initial_ip_commit = pot / 2.0;
+
+    double effective_stack = effectiveStackInput->text().trimmed().toDouble();
+    if (effective_stack <= 0.0) effective_stack = 200.0;
+
+    int raise_limit = raiseLimitInput->text().trimmed().toInt();
+    if (raise_limit <= 0) raise_limit = 3;
+
+    double all_in_threshold = allinThresholdInput->text().trimmed().toDouble();
+    if (all_in_threshold <= 0.0) all_in_threshold = 0.67;
+
+    poker_solver::core::GameRound starting_round = poker_solver::core::GameRound::kFlop;
+    if (initial_board_ints.empty()) {
+        starting_round = poker_solver::core::GameRound::kPreflop;
+    } else if (initial_board_ints.size() == 3) {
+        starting_round = poker_solver::core::GameRound::kFlop;
+    } else if (initial_board_ints.size() == 4) {
+        starting_round = poker_solver::core::GameRound::kTurn;
+    } else if (initial_board_ints.size() == 5) {
+        starting_round = poker_solver::core::GameRound::kRiver;
+    }
+
+    auto parseSizes = [](QLineEdit* edit) -> std::vector<double> {
+        std::vector<double> sizes;
+        if (!edit) return sizes;
+        QString text = edit->text().trimmed();
+        QStringList tokens = text.split(QRegularExpression("[,\\s]+"), Qt::SkipEmptyParts);
+        for (const QString& tok : tokens) {
+            bool ok = false;
+            double val = tok.toDouble(&ok);
+            if (ok && val > 0.0) {
+                sizes.push_back(val);
+            }
+        }
+        return sizes;
+    };
+
+    poker_solver::config::StreetSetting flop_ip(parseSizes(flopIP.betSizes), parseSizes(flopIP.raiseSizes), {}, flopIP.addAllIn->isChecked());
+    poker_solver::config::StreetSetting flop_oop(parseSizes(flopOOP.betSizes), parseSizes(flopOOP.raiseSizes), {}, flopOOP.addAllIn->isChecked());
+    poker_solver::config::StreetSetting turn_ip(parseSizes(turnIP.betSizes), parseSizes(turnIP.raiseSizes), {}, turnIP.addAllIn->isChecked());
+    poker_solver::config::StreetSetting turn_oop(parseSizes(turnOOP.betSizes), parseSizes(turnOOP.raiseSizes), {}, turnOOP.addAllIn->isChecked());
+    poker_solver::config::StreetSetting river_ip(parseSizes(riverIP.betSizes), parseSizes(riverIP.raiseSizes), {}, riverIP.addAllIn->isChecked());
+    poker_solver::config::StreetSetting river_oop(parseSizes(riverOOP.betSizes), parseSizes(riverOOP.raiseSizes), {}, riverOOP.addAllIn->isChecked());
+
+    poker_solver::config::GameTreeBuildingSettings settings(
+        flop_ip, turn_ip, river_ip,
+        flop_oop, turn_oop, river_oop
+    );
+
+    return poker_solver::config::Rule(
+        deck,
+        initial_oop_commit,
+        initial_ip_commit,
+        starting_round,
+        initial_board_ints,
+        raise_limit,
+        1.0, 2.0, // small blind, big blind
+        effective_stack,
+        settings,
+        all_in_threshold
+    );
+}
+
 void MainWindow::showIPRangeSelector() {
-    RangeSelector *selector = new RangeSelector(this, true);
-    selector->exec();
+    RangeSelector selector(this, true);
+    selector.setSelectedRange(ipRange_);
+    if (selector.exec() == QDialog::Accepted) {
+        ipRange_ = selector.getSelectedRange();
+        int count = ipRange_.split(',', Qt::SkipEmptyParts).size();
+        selectIPButton->setText(QString("IP Range (%1 combos)").arg(count));
+        appendToLog(QString("Updated IP range (%1 combos): %2").arg(count).arg(ipRange_));
+    }
 }
 
 void MainWindow::showOOPRangeSelector() {
-    RangeSelector *selector = new RangeSelector(this, false);
-    selector->exec();
+    RangeSelector selector(this, false);
+    selector.setSelectedRange(oopRange_);
+    if (selector.exec() == QDialog::Accepted) {
+        oopRange_ = selector.getSelectedRange();
+        int count = oopRange_.split(',', Qt::SkipEmptyParts).size();
+        selectOOPButton->setText(QString("OOP Range (%1 combos)").arg(count));
+        appendToLog(QString("Updated OOP range (%1 combos): %2").arg(count).arg(oopRange_));
+    }
 }
 
 void MainWindow::copyIPtoOOP() {
@@ -373,15 +456,37 @@ void MainWindow::copyIPtoOOP() {
     riverOOP.betSizes->setText(riverIP.betSizes->text());
     riverOOP.raiseSizes->setText(riverIP.raiseSizes->text());
     riverOOP.addAllIn->setChecked(riverIP.addAllIn->isChecked());
+
+    oopRange_ = ipRange_;
+    int count = oopRange_.split(',', Qt::SkipEmptyParts).size();
+    selectOOPButton->setText(QString("OOP Range (%1 combos)").arg(count));
+    appendToLog(QString("Copied IP parameters and range (%1 combos) to OOP.").arg(count));
 }
 
 void MainWindow::buildTree() {
-    appendToLog("Loading Hold'em hand evaluation table...");
-    appendToLog("Loading Short Deck hand evaluation table...");
-    appendToLog("Hand evaluation tables loaded successfully.");
-    appendToLog("Building game tree...");
-    appendToLog("Game tree built successfully.");
+    appendToLog("Building game tree from user configuration...");
+    try {
+        QString boardText = boardInput->text().trimmed();
+        QStringList cardTokens = boardText.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+        std::vector<int> initial_board_ints;
+        for (const QString& tok : cardTokens) {
+            auto val = poker_solver::core::Card::StringToInt(tok.toStdString());
+            if (val) initial_board_ints.push_back(*val);
+        }
+
+        auto rule = buildRuleFromUI(initial_board_ints);
+        poker_solver::tree::GameTree tree(rule);
+
+        appendToLog(QString("Game tree built successfully: %1 action nodes, %2 chance nodes, %3 terminal nodes, %4 showdown nodes.")
+            .arg(tree.GetNumActionNodes())
+            .arg(tree.GetNumChanceNodes())
+            .arg(tree.GetNumTerminalNodes())
+            .arg(tree.GetNumShowdownNodes()));
+    } catch (const std::exception& e) {
+        appendToLog(QString("[ERROR] Failed to build tree: %1").arg(e.what()));
+    }
 }
+
 MainWindow::~MainWindow() {
     stopSolving();
     if (solverThread_) {
@@ -391,77 +496,69 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::estimateMemory() {
-    appendToLog("Estimating memory requirements...");
-    // Add actual memory estimation logic here
+    appendToLog("Estimating trainable memory requirements...");
+    try {
+        QString boardText = boardInput->text().trimmed();
+        QStringList cardTokens = boardText.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+        std::vector<int> initial_board_ints;
+        for (const QString& tok : cardTokens) {
+            auto val = poker_solver::core::Card::StringToInt(tok.toStdString());
+            if (val) initial_board_ints.push_back(*val);
+        }
+
+        auto rule = buildRuleFromUI(initial_board_ints);
+        poker_solver::tree::GameTree tree(rule);
+
+        auto ip_hands = poker_solver::ranges::PrivateRangeConverter::StringToPrivateHands(
+            ipRange_.toStdString(), initial_board_ints);
+        auto oop_hands = poker_solver::ranges::PrivateRangeConverter::StringToPrivateHands(
+            oopRange_.toStdString(), initial_board_ints);
+
+        uint64_t bytes = tree.EstimateTrainableMemory(ip_hands.size(), oop_hands.size());
+        double mb = bytes / (1024.0 * 1024.0);
+        appendToLog(QString("Estimated trainable memory: %1 MB (%2 bytes) for %3 IP combos and %4 OOP combos.")
+            .arg(mb, 0, 'f', 2)
+            .arg(bytes)
+            .arg(ip_hands.size())
+            .arg(oop_hands.size()));
+    } catch (const std::exception& e) {
+        appendToLog(QString("[ERROR] Failed to estimate memory: %1").arg(e.what()));
+    }
 }
 
 void MainWindow::startSolving() {
-    appendToLog("Parsing inputs and building tree...");
-    
+    appendToLog("Parsing inputs and starting solver...");
     startSolvingButton->setEnabled(false);
-    
-    // In a full implementation, we'd parse flopIP.betSizes, etc. 
-    // and build the `core::GameRule` dynamically here.
-    // For now, let's build a simple dummy rule or just log it.
-    appendToLog("Board: " + boardInput->text());
-    
-    // We will simulate loading by launching the solver with a dummy solver if needed.
-    // To do this for real, we need PrivateRangeConverter, GameTreeBuildingSettings, etc.
-    
-    // Since building the full GameRule from UI inputs is thousands of lines of boilerplate, 
-    // we'll load the "simple_flop_scenario.json" for demonstration purposes when "Start Solving" is clicked.
-    
-    appendToLog("Loading flop scenario to demonstrate background solving...");
 
     try {
-        // Just launch a test scenario to demonstrate the background thread
-        std::ifstream file("test_data/simple_flop_scenario.json");
-        json j;
-        file >> j;
-        
-        poker_solver::core::Deck deck;
-        // Parse user board from boardInput
         QString boardText = boardInput->text().trimmed();
         QStringList cardTokens = boardText.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
-        std::vector<int> user_board_ints;
+        std::vector<int> initial_board_ints;
         for (const QString& tok : cardTokens) {
             auto val = poker_solver::core::Card::StringToInt(tok.toStdString());
-            if (val) {
-                user_board_ints.push_back(*val);
-            }
+            if (val) initial_board_ints.push_back(*val);
         }
-        
-        std::vector<int> initial_board_ints;
-        if (user_board_ints.size() == 3 || user_board_ints.size() == 4 || user_board_ints.size() == 5) {
-            initial_board_ints = user_board_ints;
-            json board_arr = json::array();
-            for (int c : initial_board_ints) {
-                board_arr.push_back(poker_solver::core::Card::IntToString(c));
-            }
-            j["game_rule"]["initial_board"] = board_arr;
-            if (initial_board_ints.size() == 4) {
-                j["game_rule"]["starting_round"] = "Turn";
-            } else if (initial_board_ints.size() == 5) {
-                j["game_rule"]["starting_round"] = "River";
-            } else {
-                j["game_rule"]["starting_round"] = "Flop";
-            }
-        } else {
-            for (const auto& card_str : j["game_rule"]["initial_board"]) {
-                auto val = poker_solver::core::Card::StringToInt(card_str.get<std::string>());
-                if (val) initial_board_ints.push_back(*val);
-            }
-        }
-        
-        poker_solver::config::Rule rule = create_rule_from_json(j["game_rule"], deck);
+
+        auto rule = buildRuleFromUI(initial_board_ints);
         uint64_t initial_board_mask = poker_solver::core::Card::CardIntsToUint64(initial_board_ints);
-        
-        std::vector<poker_solver::core::PrivateHand> ip_range = 
-            poker_solver::ranges::PrivateRangeConverter::StringToPrivateHands(
-                j["player_ranges"]["ip"].get<std::string>(), initial_board_ints);
-        std::vector<poker_solver::core::PrivateHand> oop_range = 
-            poker_solver::ranges::PrivateRangeConverter::StringToPrivateHands(
-                j["player_ranges"]["oop"].get<std::string>(), initial_board_ints);
+
+        auto ip_hands = poker_solver::ranges::PrivateRangeConverter::StringToPrivateHands(
+            ipRange_.toStdString(), initial_board_ints);
+        auto oop_hands = poker_solver::ranges::PrivateRangeConverter::StringToPrivateHands(
+            oopRange_.toStdString(), initial_board_ints);
+
+        if (ip_hands.empty() || oop_hands.empty()) {
+            throw std::runtime_error("IP or OOP range contains no valid hands for the given board.");
+        }
+
+        appendToLog(QString("Board: %1 (%2 cards), Pot: %3, Effective Stack: %4, IP combos: %5, OOP combos: %6")
+            .arg(boardText)
+            .arg(initial_board_ints.size())
+            .arg(rule.initial_pot())
+            .arg(rule.initial_effective_stack())
+            .arg(ip_hands.size())
+            .arg(oop_hands.size()));
+
         QString dictPath = "five_card_strength.txt";
         QString appDir = QCoreApplication::applicationDirPath();
         if (QFile::exists(appDir + "/five_card_strength.txt") || QFile::exists(appDir + "/five_card_strength.bin")) {
@@ -473,24 +570,22 @@ void MainWindow::startSolving() {
         }
         auto evaluator = std::make_shared<poker_solver::eval::TableHandEvaluator>(dictPath.toStdString());
         auto phm = std::make_shared<poker_solver::ranges::PrivateHandManager>(
-            std::vector<std::vector<poker_solver::core::PrivateHand>>{ip_range, oop_range},
+            std::vector<std::vector<poker_solver::core::PrivateHand>>{ip_hands, oop_hands},
             initial_board_mask
         );
         auto rrm = std::make_shared<poker_solver::ranges::RiverRangeManager>(evaluator);
         auto game_tree = std::make_shared<poker_solver::tree::GameTree>(rule);
-        
+
         poker_solver::solver::CfrPlusSolver::Config config;
         config.iteration_limit = iterationsInput->text().toInt();
         if (config.iteration_limit <= 0) config.iteration_limit = 1000;
         config.num_threads = threadsInput->text().toInt();
         if (config.num_threads <= 0) config.num_threads = 8;
-        
+
         config.target_exploitability = exploitabilityInput->text().trimmed().toDouble();
         config.exploitability_interval = 25;
-        
+
         config.progress_callback = [this](int iter) {
-            // Must emit signal to cross thread boundary safely in Qt, 
-            // but we can use QMetaObject::invokeMethod
             QMetaObject::invokeMethod(this, [this, iter]() {
                 this->onSolverProgress(iter, "Solving...");
             }, Qt::QueuedConnection);
@@ -501,24 +596,24 @@ void MainWindow::startSolving() {
                 this->appendToLog(QString("Iteration %1 - Exploitability: %2%").arg(iter).arg(exp, 0, 'f', 4));
             }, Qt::QueuedConnection);
         };
-        
+
         auto solver = std::make_shared<poker_solver::solver::CfrPlusSolver>(game_tree, phm, rrm, rule, config);
-        
+
         solverThread_ = new QThread(this);
         solverThread_->setStackSize(8 * 1024 * 1024); // 8 MB stack for CFR recursion
         solverWorker_ = new SolverWorker(solver);
         solverWorker_->moveToThread(solverThread_);
-        
+
         connect(solverThread_, &QThread::started, solverWorker_, &SolverWorker::process);
         connect(solverWorker_, &SolverWorker::finishedStrategy, this, &MainWindow::onSolverFinishedStrategy);
         connect(solverWorker_, &SolverWorker::error, this, &MainWindow::onSolverError);
         connect(solverWorker_, &SolverWorker::finishedStrategy, solverWorker_, &QObject::deleteLater);
         connect(solverThread_, &QThread::finished, solverThread_, &QObject::deleteLater);
-        
+
         solverThread_->start();
-        
+
     } catch (const std::exception& e) {
-        appendToLog(QString("Error starting solver: ") + e.what());
+        appendToLog(QString("[ERROR] Failed to start solver: %1").arg(e.what()));
         startSolvingButton->setEnabled(true);
     }
 }

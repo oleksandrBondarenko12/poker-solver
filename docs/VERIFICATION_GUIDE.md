@@ -35,12 +35,12 @@ graph TD
   ```text
   card_int = rank * 4 + suit
   ```
-  - **Suits** (`0 ... 3`): `0 = s` (Spades), `1 = h` (Hearts), `2 = d` (Diamonds), `3 = c` (Clubs)
+  - **Suits** (`0 ... 3`): `0 = c` (Clubs), `1 = d` (Diamonds), `2 = h` (Hearts), `3 = s` (Spades)
   - **Ranks** (`0 ... 12`): `0 = 2`, `1 = 3`, ..., `11 = K`, `12 = A` (cards `0 ... 51`)
   - **Concrete Examples**:
-    - `As` (Ace of Spades): `12 * 4 + 0 = 48`
-    - `Kh` (King of Hearts): `11 * 4 + 1 = 45`
-    - `2c` (Deuce of Clubs): `0 * 4 + 3 = 3`
+    - `2c` (Deuce of Clubs): `0 * 4 + 0 = 0`
+    - `Kh` (King of Hearts): `11 * 4 + 2 = 46`
+    - `As` (Ace of Spades): `12 * 4 + 3 = 51`
 
 - **64-bit Bitmask Representation**:
   ```text
@@ -291,7 +291,7 @@ Given $N$ hero combos and $M$ opponent combos pre-sorted from strongest to weake
   ```
 - **Flop Solve**:
   ```text
-  SimpleFlopTest Exploitability (pot=30.00000000): 0.3765%
+  SimpleFlopTest Exploitability (pot=30.00000000): 0.1747%
   SimpleFlopTest EV P0: -8.2050, P1: 8.2050, Sum: -0.0000
   ```
 - **Zero-Sum Check**: `Sum` is identically `0.00000000` (within machine epsilon).

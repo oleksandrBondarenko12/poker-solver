@@ -13,6 +13,8 @@ class RangeSelector : public QDialog {
 
 public:
     RangeSelector(QWidget *parent = nullptr, bool isIP = true);
+    QString getSelectedRange() const { return selectedRange_; }
+    void setSelectedRange(const QString& range);
 
 private slots:
     void confirmSelection();
@@ -39,6 +41,12 @@ private:
     QString getCellId(int row, int column) const;
     bool isPair(int row, int column) const;
     bool isSuited(int row, int column) const;
+    QColor getDefaultCellColor(int row, int column) const;
+    void syncTableToText();
+    void syncTextToTable();
+
+    QString selectedRange_;
+    bool updatingText_ = false;
 };
 
 #endif // RANGESELECTOR_H 

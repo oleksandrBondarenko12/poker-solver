@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <span>
 #include <mutex>
+#include <shared_mutex>
 #include <memory>
 #include <cmath>
 #include <fstream>
@@ -37,6 +38,7 @@ core::NodeRef GameTree::create_action_node(uint8_t player, core::GameRound round
     action_first_edge_.push_back(0);
     action_num_edges_.push_back(0);
     action_trainables_.push_back({});
+    action_mutexes_.push_back(std::make_unique<std::shared_mutex>());
     return {core::GameTreeNodeType::kAction, idx};
 }
 
@@ -79,27 +81,86 @@ void GameTree::build_action_node(uint32_t node_idx, const std::vector<core::Game
     }
 }
 
-std::shared_ptr<solver::Trainable> GameTree::get_trainable(uint32_t action_idx, uint64_t canonical_board_mask, size_t num_actions, size_t num_hands) {
-    std::lock_guard<std::mutex> lock(trainables_mutex_);
+solver::Trainable* GameTree::get_trainable(uint32_t action_idx, uint64_t canonical_board_mask, size_t num_actions, size_t num_hands) {
     if (action_idx >= action_trainables_.size()) {
-        action_trainables_.resize(action_idx + 1);
-    }
-    auto it = action_trainables_[action_idx].find(canonical_board_mask);
-    if (it != action_trainables_[action_idx].end()) {
-        return it->second;
+        std::lock_guard<std::mutex> global_lock(trainables_mutex_);
+        while (action_trainables_.size() <= action_idx) {
+            action_trainables_.push_back({});
+            action_mutexes_.push_back(std::make_unique<std::shared_mutex>());
+        }
     }
     
-    // Allocate on-the-fly
-    auto trainable = std::make_shared<solver::DiscountedCfrTrainable>(num_actions, num_hands);
-    action_trainables_[action_idx][canonical_board_mask] = trainable;
-    return trainable;
+    std::shared_mutex& node_mutex = *action_mutexes_[action_idx];
+    
+    // Fast path: shared read lock (concurrent across all OpenMP threads)
+    {
+        std::shared_lock<std::shared_mutex> read_lock(node_mutex);
+        const auto& map = action_trainables_[action_idx];
+        auto it = map.find(canonical_board_mask);
+        if (it != map.end()) {
+            return it->second.get();
+        }
+    }
+    
+    // Slow path: unique write lock for initial allocation (primarily iteration 1)
+    {
+        std::unique_lock<std::shared_mutex> write_lock(node_mutex);
+        auto& map = action_trainables_[action_idx];
+        auto it = map.find(canonical_board_mask);
+        if (it != map.end()) {
+            return it->second.get();
+        }
+        
+        auto trainable = std::make_shared<solver::DiscountedCfrTrainable>(num_actions, num_hands);
+        map[canonical_board_mask] = trainable;
+        return trainable.get();
+    }
+}
+
+std::shared_ptr<solver::Trainable> GameTree::get_trainable_shared(uint32_t action_idx, uint64_t canonical_board_mask, size_t num_actions, size_t num_hands) {
+    if (action_idx >= action_trainables_.size()) {
+        std::lock_guard<std::mutex> global_lock(trainables_mutex_);
+        while (action_trainables_.size() <= action_idx) {
+            action_trainables_.push_back({});
+            action_mutexes_.push_back(std::make_unique<std::shared_mutex>());
+        }
+    }
+    
+    std::shared_mutex& node_mutex = *action_mutexes_[action_idx];
+    
+    {
+        std::shared_lock<std::shared_mutex> read_lock(node_mutex);
+        const auto& map = action_trainables_[action_idx];
+        auto it = map.find(canonical_board_mask);
+        if (it != map.end()) {
+            return it->second;
+        }
+    }
+    
+    {
+        std::unique_lock<std::shared_mutex> write_lock(node_mutex);
+        auto& map = action_trainables_[action_idx];
+        auto it = map.find(canonical_board_mask);
+        if (it != map.end()) {
+            return it->second;
+        }
+        
+        auto trainable = std::make_shared<solver::DiscountedCfrTrainable>(num_actions, num_hands);
+        map[canonical_board_mask] = trainable;
+        return trainable;
+    }
 }
 
 void GameTree::set_trainable(uint32_t action_idx, uint64_t canonical_board_mask, std::shared_ptr<solver::Trainable> trainable) {
-    std::lock_guard<std::mutex> lock(trainables_mutex_);
     if (action_idx >= action_trainables_.size()) {
-        action_trainables_.resize(action_idx + 1);
+        std::lock_guard<std::mutex> global_lock(trainables_mutex_);
+        while (action_trainables_.size() <= action_idx) {
+            action_trainables_.push_back({});
+            action_mutexes_.push_back(std::make_unique<std::shared_mutex>());
+        }
     }
+    
+    std::unique_lock<std::shared_mutex> write_lock(*action_mutexes_[action_idx]);
     action_trainables_[action_idx][canonical_board_mask] = trainable;
 }
 

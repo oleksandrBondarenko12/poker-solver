@@ -76,7 +76,7 @@ graph TD
 - **Key Symbols**:
   - `class Card` (aliased as `PokerCard`): Represents an individual playing card or empty state (`std::optional<int> card_int_`).
   - Constants: `kNumCardsInDeck = 52`, `kNumSuits = 4`, `kNumRanks = 13`.
-  - Encoding formula: `card_int = rank * 4 + suit` (where suits are `0=s, 1=h, 2=d, 3=c` and ranks are `0=2, ..., 12=A`).
+  - Encoding formula: `card_int = rank * 4 + suit` (where suits are `0=c, 1=d, 2=h, 3=s` and ranks are `0=2, ..., 12=A`; e.g., `2c = 0`, `As = 51`).
 - **Core Algorithms & Modern Methods**:
   - `card_int_to_uint64(int card_int)` / `CardIntToUint64`: Converts a card index to bitmask `1ULL << card_int`.
   - `do_boards_overlap(uint64_t b1, uint64_t b2)` / `DoBoardsOverlap`: Returns `(b1 & b2) != 0` in a single CPU cycle.

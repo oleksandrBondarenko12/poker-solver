@@ -577,7 +577,7 @@ TEST_F(CfrPlusSolverIntegrationTest, InjectedVulnerabilityStressTest) {
     ASSERT_GE(call_action_idx, 0) << "Facing bet node must have a CALL action";
 
     // Save the original converged trainable for Player 0 at this node
-    auto original_trainable = game_tree->GetTrainable(facing_bet_idx, initial_board_mask, ip_num_actions, ip_num_hands);
+    auto original_trainable = game_tree->GetTrainableShared(facing_bet_idx, initial_board_mask, ip_num_actions, ip_num_hands);
     const auto& orig_strat = original_trainable->GetAverageStrategy();
     std::cout << "Facing bet node (IP) action count: " << ip_num_actions << ", hands: " << ip_num_hands << std::endl;
     for (size_t a = 0; a < ip_num_actions; ++a) {
@@ -656,7 +656,7 @@ TEST_F(CfrPlusSolverIntegrationTest, InjectedVulnerabilityStressTest) {
     ASSERT_GE(oop_fold_idx, 0) << "OOP facing IP bet must have a FOLD action";
 
     size_t oop_hands = phm->GetPlayerRange(1).size();
-    auto original_oop_trainable = game_tree->GetTrainable(oop_facing_idx, initial_board_mask, oop_edges.size(), oop_hands);
+    auto original_oop_trainable = game_tree->GetTrainableShared(oop_facing_idx, initial_board_mask, oop_edges.size(), oop_hands);
     
     // Force OOP to fold 100% of the time (surrendering made pairs to any bluff)
     std::vector<double> oop_fold_strat(oop_hands * oop_edges.size(), 0.0);
@@ -687,7 +687,7 @@ TEST_F(CfrPlusSolverIntegrationTest, InjectedVulnerabilityStressTest) {
     // When OOP checks, IP holds Ace-high against OOP's made pairs.
     // If IP is injected with a flaw forcing 100% naked bluffs with Ace-high,
     // OOP's best response will call with all pairs, harvesting an extra bet every time!
-    auto original_ip_check_trainable = game_tree->GetTrainable(after_check_node.index, initial_board_mask, ip_check_edges.size(), ip_num_hands);
+    auto original_ip_check_trainable = game_tree->GetTrainableShared(after_check_node.index, initial_board_mask, ip_check_edges.size(), ip_num_hands);
 
     std::vector<double> always_bet_after_check_strat(ip_num_hands * ip_check_edges.size(), 0.0);
     for (size_t h = 0; h < ip_num_hands; ++h) {

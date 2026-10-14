@@ -65,7 +65,7 @@ uint64_t FlopIsomorphism::get_canonical_board(uint64_t board_mask) {
     uint64_t clean_mask = board_mask & 0x000FFFFFFFFFFFFFULL;
     auto card_ints = core::Card::Uint64ToCardInts(clean_mask);
     if (card_ints.size() != 3) {
-        return clean_mask;
+        return board_mask;
     }
     std::array<int, 3> best_tuple = {-1, -1, -1};
     uint64_t best_mask = board_mask;

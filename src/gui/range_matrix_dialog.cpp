@@ -219,12 +219,7 @@ void RangeSelector::setupRangeTable() {
             
             QString cellId = getCellId(i, j);
             item->setText(cellId);
-            
-            if (isPair(i, j)) {
-                item->setBackground(QColor("#1F2937"));
-            } else {
-                item->setBackground(QColor("#374151"));
-            }
+            item->setBackground(getDefaultCellColor(i, j));
             
             rangeTable->setItem(i, j, item);
         }
@@ -241,6 +236,7 @@ void RangeSelector::setupRangeTable() {
     rangeTable->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
     
     connect(rangeTable, &QTableWidget::cellClicked, this, &RangeSelector::onCellClicked);
+    connect(rangeText, &QTextEdit::textChanged, this, &RangeSelector::updateRange);
 }
 
 QString RangeSelector::getCellId(int row, int column) const {
@@ -263,62 +259,129 @@ bool RangeSelector::isSuited(int row, int column) const {
     return row < column;
 }
 
+QColor RangeSelector::getDefaultCellColor(int row, int column) const {
+    if (isPair(row, column)) {
+        return QColor("#1F2937");
+    } else if (isSuited(row, column)) {
+        return QColor("#263345");
+    } else {
+        return QColor("#374151");
+    }
+}
+
 void RangeSelector::onSliderValueChanged(int value) {
     sliderValueLabel->setText(QString(".%1").arg(value, 3, 10, QChar('0')));
 }
 
 void RangeSelector::onCellClicked(int row, int column) {
     QTableWidgetItem *item = rangeTable->item(row, column);
-    if (item) {
-        if (item->background().color() == QColor("#374151")) {
-            item->setBackground(QColor("#F59E0B")); // Selected color
-        } else {
-            item->setBackground(QColor("#374151")); // Default color
+    if (!item) return;
+
+    QColor selectedColor("#3B82F6");
+    if (item->background().color() == selectedColor) {
+        item->setBackground(getDefaultCellColor(row, column));
+    } else {
+        item->setBackground(selectedColor);
+    }
+    syncTableToText();
+}
+
+void RangeSelector::syncTableToText() {
+    if (updatingText_) return;
+    updatingText_ = true;
+
+    QStringList selected;
+    QColor selectedColor("#3B82F6");
+    for (int i = 0; i < 13; ++i) {
+        for (int j = 0; j < 13; ++j) {
+            QTableWidgetItem *item = rangeTable->item(i, j);
+            if (item && item->background().color() == selectedColor) {
+                selected.append(getCellId(i, j));
+            }
+        }
+    }
+    selectedRange_ = selected.join(",");
+    rangeText->setPlainText(selectedRange_);
+    updatingText_ = false;
+}
+
+void RangeSelector::syncTextToTable() {
+    QColor selectedColor("#3B82F6");
+
+    // First reset all cells to default
+    for (int i = 0; i < 13; ++i) {
+        for (int j = 0; j < 13; ++j) {
+            QTableWidgetItem *item = rangeTable->item(i, j);
+            if (item) {
+                item->setBackground(getDefaultCellColor(i, j));
+            }
+        }
+    }
+
+    QString text = rangeText->toPlainText();
+    QStringList tokens = text.split(QRegularExpression("[,\\s]+"), Qt::SkipEmptyParts);
+    for (const QString& tok : tokens) {
+        QString s = tok.trimmed();
+        if (s.isEmpty()) continue;
+
+        for (int i = 0; i < 13; ++i) {
+            for (int j = 0; j < 13; ++j) {
+                if (getCellId(i, j).compare(s, Qt::CaseInsensitive) == 0) {
+                    QTableWidgetItem *item = rangeTable->item(i, j);
+                    if (item) item->setBackground(selectedColor);
+                }
+            }
         }
     }
 }
 
+void RangeSelector::setSelectedRange(const QString& range) {
+    selectedRange_ = range.trimmed();
+    updatingText_ = true;
+    rangeText->setPlainText(selectedRange_);
+    updatingText_ = false;
+    syncTextToTable();
+}
+
 void RangeSelector::applyStyles() {
-    // Additional overall style for the dialog if needed
     setStyleSheet("QDialog { background-color: #1F2937; }");
 }
 
 void RangeSelector::confirmSelection() {
-    // Accept the dialog (you can add further processing here)
+    selectedRange_ = rangeText->toPlainText().trimmed();
     accept();
 }
 
 void RangeSelector::clearRange() {
-    // Clear the text input and reset cell backgrounds in the table
+    updatingText_ = true;
     rangeText->clear();
-    for (int i = 0; i < rangeTable->rowCount(); i++) {
-        for (int j = 0; j < rangeTable->columnCount(); j++) {
+    selectedRange_.clear();
+    for (int i = 0; i < 13; ++i) {
+        for (int j = 0; j < 13; ++j) {
             QTableWidgetItem *item = rangeTable->item(i, j);
-            if (item)
-                item->setBackground(QColor("#2d2d2d"));
+            if (item) item->setBackground(getDefaultCellColor(i, j));
         }
     }
+    updatingText_ = false;
 }
 
 void RangeSelector::exportRange() {
-    // Export the range text (placeholder)
     QString range = rangeText->toPlainText();
     qDebug() << "Exporting range:" << range;
 }
 
 void RangeSelector::importRange() {
-    // Import range (placeholder for file dialog or other logic)
     qDebug() << "Importing range...";
 }
 
 void RangeSelector::openRangeFolder() {
-    // Placeholder for opening the folder containing range files
     qDebug() << "Opening range folder...";
 }
 
 void RangeSelector::updateRange() {
-    // Placeholder for updating the table based on range text changes
-    qDebug() << "Updating range...";
-}
-
-// ... Implement other methods ... 
+    if (updatingText_) return;
+    updatingText_ = true;
+    selectedRange_ = rangeText->toPlainText().trimmed();
+    syncTextToTable();
+    updatingText_ = false;
+} 

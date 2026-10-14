@@ -38,13 +38,13 @@ core::ComparisonResult KuhnHandEvaluator::compare_hands(uint64_t mask1, uint64_t
 
 int KuhnHandEvaluator::get_hand_rank(const std::vector<int>& private_hand,
                                 const std::vector<int>&) const {
-    return private_hand[0];
+    return KUHN_CARD_K - private_hand[0];
 }
 
 int KuhnHandEvaluator::get_hand_rank(uint64_t mask, uint64_t) const {
     auto hand = core::Card::Uint64ToCardInts(mask);
     int c1 = (hand[0] < 50) ? hand[0] : hand[1];
-    return c1;
+    return KUHN_CARD_K - c1;
 }
 
 

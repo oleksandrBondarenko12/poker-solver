@@ -130,6 +130,7 @@ class Combinations {
     return result;
   }
 
+ private:
   const std::vector<T> input_set_;
   const size_t combination_size_; // M
   const size_t input_size_;       // N

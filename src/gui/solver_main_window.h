@@ -58,6 +58,10 @@ private:
     QPointer<SolverWorker> solverWorker_;
     nlohmann::json lastStrategy_;
     
+    QString ipRange_;
+    QString oopRange_;
+    poker_solver::config::Rule buildRuleFromUI(const std::vector<int>& initial_board_ints);
+    
     // Range Selection
     QPushButton *selectIPButton;
     QPushButton *selectOOPButton;

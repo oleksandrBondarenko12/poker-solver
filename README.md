@@ -4,7 +4,7 @@
 [![CMake](https://img.shields.io/badge/CMake-3.10+-brightgreen.svg)](https://cmake.org/)
 [![Qt6](https://img.shields.io/badge/Qt-6.x-green.svg)](https://www.qt.io/)
 [![OpenMP](https://img.shields.io/badge/OpenMP-Enabled-orange.svg)](https://www.openmp.org/)
-[![Tests](https://img.shields.io/badge/Tests-89%20Passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-105%20Passing-success.svg)](tests/)
 
 **PokerSolver** is a high-performance, mathematically rigorous C++20 Counterfactual Regret Minimization (CFR+) equilibrium solver and interactive desktop analysis suite for Heads-Up Texas Hold'em. 
 
@@ -134,7 +134,7 @@ Inspect and interact with any dumped solver JSON strategy:
 ```
 
 ### 3. Comprehensive Test Suite (`poker_solver_tests`)
-Run the 89 automated tests spanning bitboards, isomorphism, CFR convergence, and exploitability bounds:
+Run the 105 automated tests spanning bitboards, isomorphism, CFR convergence, and exploitability bounds:
 ```bash
 ./build/poker_solver_tests
 ```
@@ -153,8 +153,8 @@ The solver is verified against theoretical zero-sum equilibrium benchmarks:
 | Benchmark Scenario | Board | Pot | Convergence / Exploitability | Zero-Sum Invariance |
 | :--- | :--- | :--- | :--- | :--- |
 | **`SimpleRiverTest`** | `Ts Jh 2h 4c 5d` | 30.0 | **0.00017%** ($1.7 \times 10^{-4}\%$) | $EV_{IP} + EV_{OOP} = 0.00000000$ |
-| **`SimpleFlopTest`** | `Ts Jh 2h` | 30.0 | **0.3765%** | $EV_{IP} + EV_{OOP} = -0.0000$ |
-| **`CustomGuiScenarioTest`** | `Qs Jh 2h` | 50.0 | **3.1567%** (after 1k iterations) | Monotonic exploitability drop |
+| **`SimpleFlopTest`** | `Ts Jh 2h` | 30.0 | **0.1747%** | $EV_{IP} + EV_{OOP} = -0.0000$ |
+| **`CustomGuiScenarioTest`** | `Qs Jh 2h` | 50.0 | **0.3342%** (after 200 iterations) | $EV_{IP} + EV_{OOP} = 0.00000000$ |
 | **Injected Vulnerability Test** | `Ts Jh 2h 4c 5d` | 30.0 | Jumps to **25% - 44%** on leaks | Proves exploitability sensitivity |
 
 ---

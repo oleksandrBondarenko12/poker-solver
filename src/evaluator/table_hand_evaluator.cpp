@@ -348,13 +348,53 @@ int TableHandEvaluator::get_best_rank_for_cards(
   if (num_cards < 5)
     return kInvalidRank;
   if (num_cards == 5) {
-    try {
-      uint64_t hand_mask = core::Card::CardIntsToUint64(cards);
-      return lookup_5_card_rank(hand_mask);
-    } catch (...) {
-      return kInvalidRank;
+    uint64_t hand_mask = 0;
+    for (size_t i = 0; i < 5; ++i) {
+      if (cards[i] < 0 || cards[i] >= 52) return kInvalidRank;
+      hand_mask |= (1ULL << cards[i]);
     }
+    return lookup_5_card_rank(hand_mask);
   }
+  if (num_cards == 6) {
+    uint64_t card_bits[6];
+    uint64_t combined_mask = 0;
+    for (size_t i = 0; i < 6; ++i) {
+      if (cards[i] < 0 || cards[i] >= 52) return kInvalidRank;
+      card_bits[i] = 1ULL << cards[i];
+      combined_mask |= card_bits[i];
+    }
+    int min_rank = kInvalidRank;
+    for (size_t i = 0; i < 6; ++i) {
+      uint64_t hand_mask = combined_mask & ~card_bits[i];
+      int r = lookup_5_card_rank(hand_mask);
+      if (r != kInvalidRank) {
+        min_rank = std::min(min_rank, r);
+      }
+    }
+    return min_rank;
+  }
+  if (num_cards == 7) {
+    uint64_t card_bits[7];
+    uint64_t combined_mask = 0;
+    for (size_t i = 0; i < 7; ++i) {
+      if (cards[i] < 0 || cards[i] >= 52) return kInvalidRank;
+      card_bits[i] = 1ULL << cards[i];
+      combined_mask |= card_bits[i];
+    }
+    int min_rank = kInvalidRank;
+    for (size_t i = 0; i < 7; ++i) {
+      for (size_t j = i + 1; j < 7; ++j) {
+        uint64_t hand_mask = combined_mask & ~(card_bits[i] | card_bits[j]);
+        int r = lookup_5_card_rank(hand_mask);
+        if (r != kInvalidRank) {
+          min_rank = std::min(min_rank, r);
+        }
+      }
+    }
+    return min_rank;
+  }
+
+  // Fallback for num_cards > 7
   int min_rank = kInvalidRank;
   std::vector<int> cards_copy = cards;
   utils::Combinations<int> combos(std::move(cards_copy), 5);

@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <span>
 #include <mutex>
+#include <shared_mutex>
 
 namespace poker_solver {
 namespace solver {
@@ -67,7 +68,8 @@ class GameTree {
   inline std::span<const core::Edge> get_action_edges(uint32_t idx) const {
       return std::span<const core::Edge>(action_edges_.data() + action_first_edge_[idx], action_num_edges_[idx]);
   }
-  std::shared_ptr<solver::Trainable> get_trainable(uint32_t action_idx, uint64_t canonical_board_mask, size_t num_actions, size_t num_hands);
+  solver::Trainable* get_trainable(uint32_t action_idx, uint64_t canonical_board_mask, size_t num_actions, size_t num_hands);
+  std::shared_ptr<solver::Trainable> get_trainable_shared(uint32_t action_idx, uint64_t canonical_board_mask, size_t num_actions, size_t num_hands);
   void set_trainable(uint32_t action_idx, uint64_t canonical_board_mask, std::shared_ptr<solver::Trainable> trainable);
 
   inline size_t GetNumActionNodes() const { return get_num_action_nodes(); }
@@ -75,10 +77,13 @@ class GameTree {
   inline core::GameRound GetActionRound(uint32_t idx) const { return get_action_round(idx); }
   inline double GetActionPot(uint32_t idx) const { return get_action_pot(idx); }
   inline std::span<const core::Edge> GetActionEdges(uint32_t idx) const { return get_action_edges(idx); }
-  std::shared_ptr<solver::Trainable> GetTrainable(uint32_t action_idx, uint64_t canonical_board_mask, size_t num_actions, size_t num_hands) {
+  inline solver::Trainable* GetTrainable(uint32_t action_idx, uint64_t canonical_board_mask, size_t num_actions, size_t num_hands) {
     return get_trainable(action_idx, canonical_board_mask, num_actions, num_hands);
   }
-  void SetTrainable(uint32_t action_idx, uint64_t canonical_board_mask, std::shared_ptr<solver::Trainable> trainable) {
+  inline std::shared_ptr<solver::Trainable> GetTrainableShared(uint32_t action_idx, uint64_t canonical_board_mask, size_t num_actions, size_t num_hands) {
+    return get_trainable_shared(action_idx, canonical_board_mask, num_actions, num_hands);
+  }
+  inline void SetTrainable(uint32_t action_idx, uint64_t canonical_board_mask, std::shared_ptr<solver::Trainable> trainable) {
     set_trainable(action_idx, canonical_board_mask, trainable);
   }
   
@@ -164,6 +169,7 @@ class GameTree {
   alignas(64) std::vector<core::Edge> action_edges_;
   
   mutable std::mutex trainables_mutex_;
+  mutable std::vector<std::unique_ptr<std::shared_mutex>> action_mutexes_;
   std::vector<std::unordered_map<uint64_t, std::shared_ptr<solver::Trainable>>> action_trainables_;
 
   alignas(64) std::vector<core::GameRound> chance_rounds_;
