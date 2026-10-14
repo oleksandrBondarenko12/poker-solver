@@ -35,7 +35,10 @@ public:
   const std::vector<double>& GetCurrentStrategy() const override;
   const std::vector<double>& GetAverageStrategy() const override;
 
-  void UpdateRegrets(const std::vector<double>& weighted_regrets, int iteration) override;
+  void UpdateRegrets(const double* weighted_regrets, size_t size, int iteration) override;
+  void UpdateRegrets(const std::vector<double>& weighted_regrets, int iteration) override {
+    UpdateRegrets(weighted_regrets.data(), weighted_regrets.size(), iteration);
+  }
 
   void AccumulateAverageStrategy(
       const std::vector<double>& current_strategy, const double* reach_probs, int iteration) override;

@@ -56,6 +56,13 @@ class PrivateHandManager {
     return is_suit_pair_symmetric(suit1, suit2);
   }
 
+  const std::vector<int>& get_suit_swap_indices(size_t player_index, int suit1, int suit2) const {
+    return suit_swap_indices_[player_index][suit1][suit2];
+  }
+  const std::vector<int>& GetSuitSwapIndices(size_t player_index, int suit1, int suit2) const {
+    return get_suit_swap_indices(player_index, suit1, suit2);
+  }
+
   double calculate_valid_deal_mass(
       const std::vector<std::vector<double>> &reach_probs) const;
   double CalculateValidDealMass(
@@ -69,6 +76,7 @@ class PrivateHandManager {
  private:
   void calculate_initial_reach_probs();
   bool compute_suit_pair_symmetry(int suit1, int suit2) const;
+  void compute_suit_swap_indices();
 
   size_t num_players_;
   uint64_t initial_board_mask_;
@@ -77,6 +85,7 @@ class PrivateHandManager {
   std::vector<std::vector<double>> initial_reach_probs_;
   double valid_deal_mass_ = 1.0;
   std::array<std::array<bool, 4>, 4> suit_pair_symmetric_{};
+  std::vector<std::array<std::array<std::vector<int>, 4>, 4>> suit_swap_indices_;
 };
 
 using RangeDistributionManager = PrivateHandManager;

@@ -134,14 +134,14 @@ Inspect and interact with any dumped solver JSON strategy:
 ```
 
 ### 3. Comprehensive Test Suite (`poker_solver_tests`)
-Run the 105 automated tests spanning bitboards, isomorphism, CFR convergence, and exploitability bounds:
+Run the 107 automated tests spanning bitboards, isomorphism, CFR convergence, and exploitability bounds:
 ```bash
 ./build/poker_solver_tests
 ```
 
-Or run targeted fast unit tests:
+Or run targeted fast unit tests (105 tests execute in ~2.2s):
 ```bash
-./build/poker_solver_tests --gtest_filter="-*CfrPlusSolverIntegrationTest*"
+./build/poker_solver_tests --gtest_filter="-*CustomGui*:*GenerateGuiOutput*"
 ```
 
 ---

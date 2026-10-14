@@ -439,9 +439,52 @@ int TableHandEvaluator::get_hand_rank(uint64_t private_mask,
                                  uint64_t public_mask) const {
   if (core::Card::DoBoardsOverlap(private_mask, public_mask))
     return kInvalidRank;
-  uint64_t combined_mask = private_mask | public_mask;
-  std::vector<int> all_cards = core::Card::Uint64ToCardInts(combined_mask);
-  return get_best_rank_for_cards(all_cards);
+  uint64_t combined_mask = (private_mask | public_mask) & 0x000FFFFFFFFFFFFFULL;
+
+  uint64_t card_bits[7];
+  size_t num_cards = 0;
+  uint64_t temp = combined_mask;
+  while (temp > 0) {
+    if (num_cards >= 7) {
+      std::vector<int> all_cards = core::Card::Uint64ToCardInts(combined_mask);
+      return get_best_rank_for_cards(all_cards);
+    }
+    uint64_t lsb = temp & -temp;
+    card_bits[num_cards++] = lsb;
+    temp ^= lsb;
+  }
+
+  if (num_cards < 5) {
+    return kInvalidRank;
+  }
+  if (num_cards == 5) {
+    return lookup_5_card_rank(combined_mask);
+  }
+  if (num_cards == 6) {
+    int min_rank = kInvalidRank;
+    for (size_t i = 0; i < 6; ++i) {
+      uint64_t hand_mask = combined_mask & ~card_bits[i];
+      int r = lookup_5_card_rank(hand_mask);
+      if (r != kInvalidRank) {
+        min_rank = std::min(min_rank, r);
+      }
+    }
+    return min_rank;
+  }
+  if (num_cards == 7) {
+    int min_rank = kInvalidRank;
+    for (size_t i = 0; i < 7; ++i) {
+      for (size_t j = i + 1; j < 7; ++j) {
+        uint64_t hand_mask = combined_mask & ~(card_bits[i] | card_bits[j]);
+        int r = lookup_5_card_rank(hand_mask);
+        if (r != kInvalidRank) {
+          min_rank = std::min(min_rank, r);
+        }
+      }
+    }
+    return min_rank;
+  }
+  return kInvalidRank;
 }
 
 core::ComparisonResult

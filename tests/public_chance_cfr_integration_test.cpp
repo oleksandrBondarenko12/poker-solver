@@ -113,6 +113,7 @@ public:
     const std::vector<double>& GetCurrentStrategy() const override { return strategy_; }
     const std::vector<double>& GetAverageStrategy() const override { return strategy_; }
     void UpdateRegrets(const std::vector<double>&, int) override {}
+    void UpdateRegrets(const double*, size_t, int) override {}
     void AccumulateAverageStrategy(const std::vector<double>&, const double*, int) override {}
     void SetEv(const std::vector<double>&) override {}
     json DumpStrategy(bool) const override { return json(); }

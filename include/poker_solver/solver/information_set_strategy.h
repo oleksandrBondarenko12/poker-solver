@@ -22,8 +22,15 @@ public:
   // Regrets arrive pre-weighted by opp_reach * chance_reach.
   // Implementations accumulate incoming weighted regret (e.g. CFR+ non-negative
   // regret matching).
+  virtual void UpdateRegrets(const double *weighted_regrets, size_t size,
+                             int iteration) {
+    std::vector<double> v(weighted_regrets, weighted_regrets + size);
+    UpdateRegrets(v, iteration);
+  }
   virtual void UpdateRegrets(const std::vector<double> &weighted_regrets,
-                             int iteration) = 0;
+                             int iteration) {
+    UpdateRegrets(weighted_regrets.data(), weighted_regrets.size(), iteration);
+  }
 
   // Accumulates the average strategy.
   // Implementations use the per-hand reach weights provided in reach_probs and

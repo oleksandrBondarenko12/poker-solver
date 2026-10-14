@@ -118,10 +118,13 @@ const std::vector<double>& DiscountedCfrTrainable::GetAverageStrategy() const {
   return average_strategy_;
 }
 
-void DiscountedCfrTrainable::UpdateRegrets(const std::vector<double>& weighted_regrets, int iteration) {
+void DiscountedCfrTrainable::UpdateRegrets(const double* weighted_regrets, size_t size, int iteration) {
   size_t total_size = num_actions_ * num_hands_;
-  if (weighted_regrets.size() != total_size) {
+  if (size != total_size) {
     throw std::invalid_argument("Regret vector size mismatch in UpdateRegrets.");
+  }
+  if (!weighted_regrets) {
+    throw std::invalid_argument("weighted_regrets is null in UpdateRegrets.");
   }
   if (iteration <= 0) {
     throw std::invalid_argument("Iteration number must be positive in UpdateRegrets.");

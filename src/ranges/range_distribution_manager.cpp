@@ -70,6 +70,9 @@ PrivateHandManager::PrivateHandManager(
 
   // --- Calculate Initial Reach Probabilities ---
   calculate_initial_reach_probs();
+
+  // --- Precompute Suit Swap Hand Index Mappings ---
+  compute_suit_swap_indices();
 }
 
 const std::vector<core::PrivateHand> &
@@ -322,6 +325,54 @@ void PrivateHandManager::set_relative_probs(uint64_t initial_board_mask) {
       if (player_prob_sum > 1e-12) {
         player_ranges_[p][i].SetRelativeProb(
             player_ranges_[p][i].GetRelativeProb() / player_prob_sum);
+      }
+    }
+  }
+}
+
+void PrivateHandManager::compute_suit_swap_indices() {
+  suit_swap_indices_.resize(num_players_);
+  for (size_t p = 0; p < num_players_; ++p) {
+    const auto &range = player_ranges_[p];
+    size_t num_hands = range.size();
+
+    for (int s1 = 0; s1 < 4; ++s1) {
+      for (int s2 = 0; s2 < 4; ++s2) {
+        auto &indices = suit_swap_indices_[p][s1][s2];
+        indices.resize(num_hands, -1);
+        if (s1 == s2) {
+          for (size_t i = 0; i < num_hands; ++i) {
+            indices[i] = static_cast<int>(i);
+          }
+          continue;
+        }
+
+        std::vector<int> self_ind(num_hands, -1);
+        int privateint2ind[52 * 52];
+        std::fill_n(privateint2ind, 52 * 52, -1);
+
+        for (size_t i = 0; i < num_hands; ++i) {
+          int card1 = range[i].Card1Int();
+          int card2 = range[i].Card2Int();
+          if (card1 > card2)
+            std::swap(card1, card2);
+          self_ind[i] = card1 * 52 + card2;
+          if (card1 % 4 == s1)
+            card1 = card1 - s1 + s2;
+          else if (card1 % 4 == s2)
+            card1 = card1 - s2 + s1;
+          if (card2 % 4 == s1)
+            card2 = card2 - s1 + s2;
+          else if (card2 % 4 == s2)
+            card2 = card2 - s2 + s1;
+          if (card1 > card2)
+            std::swap(card1, card2);
+          privateint2ind[card1 * 52 + card2] = static_cast<int>(i);
+        }
+
+        for (size_t i = 0; i < num_hands; ++i) {
+          indices[i] = privateint2ind[self_ind[i]];
+        }
       }
     }
   }

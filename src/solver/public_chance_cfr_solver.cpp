@@ -42,40 +42,13 @@ void CfrPlusSolver::exchange_suit(double *utility, size_t num_hands, int player,
                               int suit1, int suit2) const {
   if (suit1 == suit2)
     return;
-  int self_ind[kMaxHands];
-  int privateint2ind[52 * 52];
-  std::fill_n(self_ind, num_hands, -1);
-  std::fill_n(privateint2ind, 52 * 52, -1);
-  const auto &range = phm_->GetPlayerRange(player);
-  for (size_t i = 0; i < num_hands; ++i) {
-    int card1 = range[i].Card1Int();
-    int card2 = range[i].Card2Int();
-    if (card1 > card2)
-      std::swap(card1, card2);
-    self_ind[i] = card1 * 52 + card2;
-    if (card1 % 4 == suit1)
-      card1 = card1 - suit1 + suit2;
-    else if (card1 % 4 == suit2)
-      card1 = card1 - suit2 + suit1;
-    if (card2 % 4 == suit1)
-      card2 = card2 - suit1 + suit2;
-    else if (card2 % 4 == suit2)
-      card2 = card2 - suit2 + suit1;
-    if (card1 > card2)
-      std::swap(card1, card2);
-    privateint2ind[card1 * 52 + card2] = static_cast<int>(i);
-  }
-
+  const auto &swap_indices = phm_->GetSuitSwapIndices(player, suit1, suit2);
   double backup[kMaxHands];
   std::copy(utility, utility + num_hands, backup);
 
   for (size_t i = 0; i < num_hands; ++i) {
-    int idx = privateint2ind[self_ind[i]];
-    if (idx != -1) {
-      utility[i] = backup[idx];
-    } else {
-      utility[i] = 0.0;
-    }
+    int idx = swap_indices[i];
+    utility[i] = (idx != -1) ? backup[idx] : 0.0;
   }
 }
 
@@ -460,7 +433,7 @@ void CfrPlusSolver::cfr_action_node(uint32_t node_idx, const double *reach_probs
     throw std::runtime_error("Exceeded kMaxActions limit in cfr_action_node!");
   }
 
-  double child_utilities[kMaxActions][kMaxHands] = {0};
+  double child_utilities[kMaxActions][kMaxHands];
 
   for (size_t a = 0; a < num_actions; ++a) {
     double next_reach_0[kMaxHands];
@@ -482,6 +455,8 @@ void CfrPlusSolver::cfr_action_node(uint32_t node_idx, const double *reach_probs
       cfr_utility(edges[a].child, next_reach_0, next_reach_1, traverser,
                   iteration, current_board_mask, is_top_chance,
                   use_average_strategy, child_utilities[a]);
+    } else {
+      std::fill_n(child_utilities[a], traverser_num_hands, 0.0);
     }
   }
 
@@ -502,8 +477,11 @@ void CfrPlusSolver::cfr_action_node(uint32_t node_idx, const double *reach_probs
 
   if (acting_player == traverser) {
     if (!use_average_strategy) {
-      std::vector<double> weighted_regrets(num_actions *
-                                           acting_player_num_hands);
+      size_t total_regrets = num_actions * acting_player_num_hands;
+      if (total_regrets > kMaxActions * kMaxHands) {
+        throw std::runtime_error("Exceeded buffer size for weighted_regrets");
+      }
+      double weighted_regrets[kMaxActions * kMaxHands];
 
       for (size_t h = 0; h < acting_player_num_hands; ++h) {
         for (size_t a = 0; a < num_actions; ++a) {
@@ -516,7 +494,7 @@ void CfrPlusSolver::cfr_action_node(uint32_t node_idx, const double *reach_probs
           (acting_player == 0) ? reach_probs_0 : reach_probs_1;
       trainable->AccumulateAverageStrategy(current_strategy_local, actor_reach,
                                            iteration);
-      trainable->UpdateRegrets(weighted_regrets, iteration);
+      trainable->UpdateRegrets(weighted_regrets, total_regrets, iteration);
     } else {
       int opponent_player = 1 - acting_player;
       const auto &acting_range = phm_->GetPlayerRange(acting_player);
@@ -673,21 +651,15 @@ void CfrPlusSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs
     }
   } else {
     // 1-card deal logic
-    std::vector<int> available_card_indices;
-    available_card_indices.reserve(52);
+    int available_cards[52];
+    int num_available = 0;
     for (int i = 0; i < 52; ++i) {
       if (!core::Card::DoBoardsOverlap(1ULL << i, current_board_mask)) {
-        available_card_indices.push_back(i);
+        available_cards[num_available++] = i;
       }
     }
 
-    if (static_cast<int>(available_card_indices.size()) < num_cards_to_deal)
-      return;
-
-    utils::SimpleCombinations<int> combinations(available_card_indices,
-                                                num_cards_to_deal);
-    const auto &outcomes = combinations.GetCombinations();
-    if (outcomes.empty())
+    if (num_available < num_cards_to_deal)
       return;
 
     static bool no_turn_iso = (std::getenv("NO_TURN_ISO") != nullptr);
@@ -715,29 +687,28 @@ void CfrPlusSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs
       }
     }
 
-    std::vector<int> valid_cards;
-    valid_cards.reserve(outcomes.size());
-    for (size_t i = 0; i < outcomes.size(); ++i) {
-      int card_int = outcomes[i][0];
+    int valid_card_indices[52];
+    int num_valid = 0;
+    for (int i = 0; i < num_available; ++i) {
+      int card_int = available_cards[i];
       int suit = card_int % 4;
       if (current_iso_offset[suit] >= 0) {
-        valid_cards.push_back(i);
+        valid_card_indices[num_valid++] = i;
       }
     }
 
-    std::vector<std::vector<double>> results(
-        52, std::vector<double>(traverser_num_hands, 0.0));
-    double possible_deals = (outcomes.size() > 4)
-                                ? static_cast<double>(outcomes.size() - 4)
+    double results[52][kMaxHands];
+    double possible_deals = (num_available > 4)
+                                ? static_cast<double>(num_available - 4)
                                 : 1.0;
 
 #pragma omp parallel if (is_top_chance)
     {
 #pragma omp for schedule(dynamic) nowait
-      for (size_t valid_ind = 0; valid_ind < valid_cards.size(); ++valid_ind) {
-        int i = valid_cards[valid_ind];
-        int card_int = outcomes[i][0];
-        uint64_t outcome_board_mask = core::Card::CardIntsToUint64(outcomes[i]);
+      for (int valid_ind = 0; valid_ind < num_valid; ++valid_ind) {
+        int i = valid_card_indices[valid_ind];
+        int card_int = available_cards[i];
+        uint64_t outcome_board_mask = 1ULL << card_int;
         uint64_t next_board_mask;
         if (round_after_chance == core::GameRound::kTurn) {
           next_board_mask = (current_board_mask & 0x000FFFFFFFFFFFFFULL) |
@@ -779,13 +750,15 @@ void CfrPlusSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs
         if (can_reach) {
           cfr_utility(child, next_reach_0, next_reach_1, traverser, iteration,
                       next_board_mask, false, use_average_strategy,
-                      results[card_int].data());
+                      results[card_int]);
+        } else {
+          std::fill_n(results[card_int], traverser_num_hands, 0.0);
         }
       }
     }
 
-    for (size_t i = 0; i < outcomes.size(); ++i) {
-      int card_int = outcomes[i][0];
+    for (int i = 0; i < num_available; ++i) {
+      int card_int = available_cards[i];
       int suit = card_int % 4;
       int offset = current_iso_offset[suit];
 
@@ -793,8 +766,9 @@ void CfrPlusSolver::cfr_chance_node(uint32_t node_idx, const double *reach_probs
         int canonical_suit = suit + offset;
         int canonical_card = card_int + offset;
 
-        std::vector<double> mapped_utility = results[canonical_card];
-        exchange_suit(mapped_utility.data(), traverser_num_hands, traverser,
+        double mapped_utility[kMaxHands];
+        std::copy(results[canonical_card], results[canonical_card] + traverser_num_hands, mapped_utility);
+        exchange_suit(mapped_utility, traverser_num_hands, traverser,
                       canonical_suit, suit);
 
         for (size_t u = 0; u < traverser_num_hands; ++u) {
